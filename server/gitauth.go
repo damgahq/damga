@@ -57,7 +57,7 @@ func (a tokenAuth) For(repoURL string) (transport.AuthMethod, error) {
 		// SSH would need a key and a known_hosts policy, and getting the
 		// second one wrong is how a platform ends up trusting whatever host
 		// answers. Refused rather than half-supported.
-		return nil, fmt.Errorf("only https repositories are supported: %s", repoURL)
+		return nil, fmt.Errorf("yalnızca https depoları destekleniyor: %s", repoURL)
 	}
 	return &githttp.BasicAuth{Username: "x-access-token", Password: a.token}, nil
 }
@@ -68,7 +68,7 @@ func (a tokenAuth) For(repoURL string) (transport.AuthMethod, error) {
 type noAuth struct{}
 
 func (noAuth) For(string) (transport.AuthMethod, error) {
-	return nil, errors.New("no git credentials are configured: pass -git-token-file")
+	return nil, errors.New("hiçbir git kimlik bilgisi tanımlı değil: -git-token-file geçin")
 }
 
 // readGitAuth builds the credential from the configured file.

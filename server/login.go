@@ -35,7 +35,7 @@ import (
 // for another is an account enumeration oracle with a user interface. The
 // timing is handled separately, by hashing a dummy when there is no account —
 // saying the same thing while answering faster leaks exactly as much.
-const loginRefused = "that email and password do not match an account"
+const loginRefused = "bu e-posta ve parola bir hesapla eşleşmiyor"
 
 type loginRequest struct {
 	Email    string `json:"email"`
@@ -47,7 +47,7 @@ func (o Options) login(idStore identity.Store, sess *auth.Sessions, hasher *auth
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req loginRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
-			problem(w, http.StatusBadRequest, "the request body is not the expected JSON")
+			problem(w, http.StatusBadRequest, "istek gövdesi beklenen JSON değil")
 			return
 		}
 		if req.Email == "" || req.Password == "" {
@@ -64,7 +64,7 @@ func (o Options) login(idStore identity.Store, sess *auth.Sessions, hasher *auth
 			problem(w, http.StatusUnauthorized, loginRefused)
 			return
 		case err != nil:
-			problem(w, http.StatusInternalServerError, "the identity store is unavailable")
+			problem(w, http.StatusInternalServerError, "kimlik deposu kullanılamıyor")
 			return
 		}
 
@@ -78,7 +78,7 @@ func (o Options) login(idStore identity.Store, sess *auth.Sessions, hasher *auth
 			problem(w, http.StatusUnauthorized, loginRefused)
 			return
 		case err != nil:
-			problem(w, http.StatusInternalServerError, "the identity store is unavailable")
+			problem(w, http.StatusInternalServerError, "kimlik deposu kullanılamıyor")
 			return
 		}
 
@@ -104,7 +104,7 @@ func (o Options) login(idStore identity.Store, sess *auth.Sessions, hasher *auth
 
 		cookie, err := sess.Issue(r.Context(), account.ID, r.Host)
 		if err != nil {
-			problem(w, http.StatusInternalServerError, "the session could not be created")
+			problem(w, http.StatusInternalServerError, "oturum oluşturulamadı")
 			return
 		}
 		http.SetCookie(w, cookie)

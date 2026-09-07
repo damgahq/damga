@@ -349,7 +349,7 @@ func TestAnInstallThatCannotWorkWritesNothing(t *testing.T) {
 		app      string
 		wants    string
 	}{
-		{"composite", "connection-string", "rather than being one"},
+		{"composite", "connection-string", "çevresinde kuruluyor"},
 		{"shared", "one-value-two-names", "SERVICE_PASSWORD_SHARED"},
 		// Quoted as the JSON body carries it: the refusal names the kind the
 		// template asked for, and "user" is a word that also appears in the

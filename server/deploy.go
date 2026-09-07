@@ -72,11 +72,11 @@ func deploy(
 
 		var req deployRequest
 		if err := json.NewDecoder(http.MaxBytesReader(rw, r.Body, 64<<10)).Decode(&req); err != nil {
-			problem(rw, http.StatusBadRequest, "the request body is not the expected JSON")
+			problem(rw, http.StatusBadRequest, "istek gövdesi beklenen JSON değil")
 			return
 		}
 		if req.Image == "" {
-			problem(rw, http.StatusBadRequest, "a deploy needs an image")
+			problem(rw, http.StatusBadRequest, "bir deploy için imaj gerekir")
 			return
 		}
 
@@ -87,10 +87,10 @@ func deploy(
 			// put it. Saying which makes the difference between "you typed the
 			// wrong app" and "this app has never been configured".
 			problem(rw, http.StatusConflict,
-				"this app and environment have no repository configured yet")
+				"bu uygulama ve ortam için henüz bir depo tanımlı değil")
 			return
 		case err != nil:
-			problem(rw, http.StatusInternalServerError, "reading the placement failed")
+			problem(rw, http.StatusInternalServerError, "yerleşim kaydı okunamadı")
 			return
 		}
 
@@ -122,10 +122,10 @@ func deploy(
 			// A redeploy of something identical. Not an error and not a
 			// commit: inventing an empty one would put a deploy in the history
 			// that changed nothing.
-			problem(rw, http.StatusConflict, "this is already what is committed")
+			problem(rw, http.StatusConflict, "commit edilmiş olan zaten bu")
 			return
 		case err != nil:
-			problem(rw, http.StatusBadGateway, "the commit could not be pushed: "+err.Error())
+			problem(rw, http.StatusBadGateway, "commit push edilemedi: "+err.Error())
 			return
 		}
 
@@ -164,7 +164,7 @@ func renderDeploy(place placement.Placement, req deployRequest) renderFunc {
 				// Refused rather than overwritten. Something is in the
 				// directory that this build cannot read, and replacing it
 				// would delete whatever it is.
-				return nil, fmt.Errorf("the committed manifest cannot be read: %w", err)
+				return nil, fmt.Errorf("commit edilmiş manifest okunamıyor: %w", err)
 			}
 			app = parsed
 		}

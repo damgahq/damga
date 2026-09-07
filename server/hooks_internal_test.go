@@ -341,7 +341,7 @@ func TestOnlyThePushToTheDefaultBranchBuilds(t *testing.T) {
 		if code != http.StatusAccepted {
 			t.Errorf("%s = %d: %s", ref, code, got)
 		}
-		if !strings.Contains(got, "default branch") {
+		if !strings.Contains(got, "varsayılan dala") {
 			t.Errorf("%s answered %s", ref, got)
 		}
 	}

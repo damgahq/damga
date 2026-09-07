@@ -67,10 +67,10 @@ import (
 // settingsSecretNote is what the panel prints beside a secret. It is returned
 // rather than left to the page, so the control plane and the panel cannot end
 // up telling a user two different things about the same value.
-const settingsSecretNote = "This value is not in git. Git carries the name and which Secret it " +
-	"lives in; the value itself is written straight into the cluster, so there is no " +
-	"\"who changed it and when\" for it, no rollback, and if the Secret is deleted nothing " +
-	"puts it back — unlike a manifest, which Argo CD restores in about ten seconds."
+const settingsSecretNote = "Bu değer git'te değil. Git yalnızca adı ve hangi Secret'ın içinde " +
+	"yaşadığını taşır; değerin kendisi doğrudan kümeye yazılır, yani onun için " +
+	"\"kim ne zaman değiştirdi\" yoktur, geri alma yoktur, ve Secret silinirse hiçbir şey " +
+	"onu geri koymaz — Argo CD'nin yaklaşık on saniyede geri getirdiği bir manifest'in aksine."
 
 // buildNotConsumedWarning is returned for every build-time variable, because
 // one is recorded and delivered nowhere.
@@ -80,9 +80,9 @@ const settingsSecretNote = "This value is not in git. Git carries the name and w
 // build job injects none. A setting that is stored and does nothing is the
 // exact thing this endpoint exists to stop being invisible, so it says so in
 // the same breath as accepting it.
-const buildNotConsumedWarning = "build-time variables are recorded and nothing consumes them " +
-	"yet: a Build carries no environment, so the value reaches no build. It is kept so the " +
-	"setting survives until it does."
+const buildNotConsumedWarning = "derleme zamanı değişkenleri kaydediliyor ve henüz onları " +
+	"kullanan bir şey yok: bir Build hiçbir ortam taşımıyor, yani değer hiçbir derlemeye ulaşmıyor. " +
+	"Kullanılana kadar ayarın kaybolmaması için saklanıyor."
 
 // envNamePattern is what envFrom will actually deliver.
 //
@@ -200,7 +200,7 @@ func updateSettingsRoute(g guard, st stores) http.Handler {
 
 		var req wireSettings
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody)).Decode(&req); err != nil {
-			problem(w, http.StatusBadRequest, "the request body is not the expected JSON")
+			problem(w, http.StatusBadRequest, "istek gövdesi beklenen JSON değil")
 			return
 		}
 
@@ -210,7 +210,7 @@ func updateSettingsRoute(g guard, st stores) http.Handler {
 		}
 		if app.Spec.Image == "" {
 			problem(w, http.StatusConflict,
-				"nothing is deployed here yet, so there is nothing to configure")
+				"buraya henüz hiçbir şey deploy edilmedi, yani yapılandırılacak bir şey yok")
 			return
 		}
 
@@ -222,8 +222,8 @@ func updateSettingsRoute(g guard, st stores) http.Handler {
 		if len(plan.set) > 0 || len(plan.remove) > 0 {
 			if st.secrets == nil {
 				problem(w, http.StatusConflict,
-					"this installation cannot hold a secret value: it was started without a "+
-						"cluster to write the Secret into, so only literal values can be set")
+					"bu kurulum bir sır değeri tutamıyor: Secret'ın yazılacağı bir küme olmadan "+
+						"başlatıldı, bu yüzden yalnızca düz değerler ayarlanabilir")
 				return
 			}
 		}
@@ -255,11 +255,11 @@ func updateSettingsRoute(g guard, st stores) http.Handler {
 			// carries one, and answering "this is already what is committed"
 			// would be a lie about a change that really happened.
 			if len(plan.set) == 0 {
-				problem(w, http.StatusConflict, "this is already what is committed")
+				problem(w, http.StatusConflict, "commit edilmiş olan zaten bu")
 				return
 			}
 		case err != nil:
-			problem(w, http.StatusBadGateway, "the commit could not be pushed: "+err.Error())
+			problem(w, http.StatusBadGateway, "commit push edilemedi: "+err.Error())
 			return
 		}
 
@@ -268,8 +268,8 @@ func updateSettingsRoute(g guard, st stores) http.Handler {
 		if len(plan.remove) > 0 {
 			if err := st.secrets.Put(r.Context(), place.Namespace, secretName, nil, plan.remove); err != nil {
 				problem(w, http.StatusBadGateway,
-					"the settings were committed and the removed secret values are still in "+
-						"the cluster: "+err.Error())
+					"ayarlar commit edildi ve kaldırılan sır değerleri hâlâ kümede: "+
+						err.Error())
 				return
 			}
 		}
@@ -280,9 +280,9 @@ func updateSettingsRoute(g guard, st stores) http.Handler {
 			// that shows it. The commit below records that the settings changed
 			// and who changed them; what it does not contain is the value, so
 			// "committed" on its own would promise a rollback that is not there.
-			warnings = append(warnings, "a secret value is not in the commit: git records "+
-				"that this app's settings changed, who changed them and when, and the value "+
-				"itself exists only in the cluster")
+			warnings = append(warnings, "bir sır değeri commit'te yer almaz: git bu uygulamanın "+
+				"ayarlarının değiştiğini, kimin ne zaman değiştirdiğini kaydeder, ve değerin "+
+				"kendisi yalnızca kümede bulunur")
 		}
 		body := map[string]any{
 			"settings":   toWireSettings(plan.app),
@@ -296,8 +296,8 @@ func updateSettingsRoute(g guard, st stores) http.Handler {
 			code = http.StatusAccepted
 		} else {
 			body["warnings"] = append(warnings,
-				"saved: the secret values changed and nothing was committed, because git "+
-					"does not carry them")
+				"kaydedildi: sır değerleri değişti ve hiçbir şey commit edilmedi, çünkü git "+
+					"onları taşımıyor")
 		}
 		w.WriteHeader(code)
 		writeJSON(w, body)
@@ -323,13 +323,13 @@ func updateSettingsRoute(g guard, st stores) http.Handler {
 func problemWritingSecrets(w http.ResponseWriter, namespace string, err error) {
 	if apierrors.IsForbidden(err) {
 		problem(w, http.StatusConflict,
-			"this installation may not write into "+namespace+" yet: the permission to hold "+
-				"a secret value there is a manifest in this app's own directory, and Argo CD "+
-				"has not applied it yet. Deploy this app once, or wait for the next sync, and "+
-				"save again. Literal settings are unaffected.")
+			"bu kurulum henüz "+namespace+" içine yazamaz: orada bir sır değeri tutma izni, bu "+
+				"uygulamanın kendi dizinindeki bir manifest'tir, ve Argo CD onu henüz "+
+				"uygulamadı. Bu uygulamayı bir kez deploy edin ya da bir sonraki sync'i "+
+				"bekleyin, sonra yeniden kaydedin. Düz ayarlar bundan etkilenmez.")
 		return
 	}
-	problem(w, http.StatusBadGateway, "the secret values could not be written: "+err.Error())
+	problem(w, http.StatusBadGateway, "sır değerleri yazılamadı: "+err.Error())
 }
 
 // readCommittedWorkload is the state, read from the only place it lives.
@@ -344,10 +344,10 @@ func readCommittedWorkload(
 	place, err := st.placement.Get(r.Context(), ref.TenantID, ref.App, ref.Env)
 	switch {
 	case errors.Is(err, placement.ErrNotFound):
-		problem(w, http.StatusNotFound, "this app and environment have no repository configured yet")
+		problem(w, http.StatusNotFound, "bu uygulama ve ortam için henüz bir depo tanımlı değil")
 		return platformv1alpha1.Workload{}, place, false
 	case err != nil:
-		problem(w, http.StatusInternalServerError, "reading the placement failed")
+		problem(w, http.StatusInternalServerError, "yerleşim kaydı okunamadı")
 		return platformv1alpha1.Workload{}, place, false
 	}
 
@@ -360,7 +360,7 @@ func readCommittedWorkload(
 		RepoURL: place.RepoURL, Branch: place.Branch, Dir: place.Path, Auth: method,
 	})
 	if err != nil {
-		problem(w, http.StatusBadGateway, "the state repository could not be read: "+err.Error())
+		problem(w, http.StatusBadGateway, "durum deposu okunamadı: "+err.Error())
 		return platformv1alpha1.Workload{}, place, false
 	}
 
@@ -373,7 +373,7 @@ func readCommittedWorkload(
 	}
 	app, err := manifest.Parse(body)
 	if err != nil {
-		problem(w, http.StatusBadGateway, "the committed manifest cannot be read: "+err.Error())
+		problem(w, http.StatusBadGateway, "commit edilmiş manifest okunamıyor: "+err.Error())
 		return platformv1alpha1.Workload{}, place, false
 	}
 	return app, place, true
@@ -459,7 +459,7 @@ type settingsPlan struct {
 func planSettings(req wireSettings, current platformv1alpha1.Workload) (settingsPlan, error) {
 	if len(req.Env) > maxSettingsEnv {
 		return settingsPlan{}, fmt.Errorf(
-			"an app may carry %d environment variables and this asks for %d",
+			"bir uygulama %d ortam değişkeni taşıyabilir, bu istek ise %d tane istiyor",
 			maxSettingsEnv, len(req.Env))
 	}
 
@@ -474,21 +474,21 @@ func planSettings(req wireSettings, current platformv1alpha1.Workload) (settings
 		key := strings.TrimSpace(v.Key)
 		switch {
 		case key == "":
-			return settingsPlan{}, errors.New("a variable needs a name")
+			return settingsPlan{}, errors.New("bir değişkenin adı olmalı")
 		case !envNamePattern.MatchString(key):
 			return settingsPlan{}, fmt.Errorf(
-				"%q is not a usable environment variable name: it has to start with a letter "+
-					"or an underscore and hold only letters, digits and underscores, or the "+
-					"container is started without it and nothing says so", key)
+				"%q kullanılabilir bir ortam değişkeni adı değil: bir harfle ya da alt çizgiyle "+
+					"başlamalı ve yalnızca harf, rakam ve alt çizgi taşımalı, yoksa konteyner "+
+					"o değişken olmadan başlar ve bunu söyleyen hiçbir şey olmaz", key)
 		case len(key) > 128:
-			return settingsPlan{}, fmt.Errorf("the name %q is longer than 128 characters", key)
+			return settingsPlan{}, fmt.Errorf("%q adı 128 karakterden uzun", key)
 		case seen[key]:
 			return settingsPlan{}, fmt.Errorf(
-				"%s is listed twice; one variable has one value", key)
+				"%s listede iki kez var; bir değişkenin bir değeri olur", key)
 		case !v.Build && !v.Runtime:
 			return settingsPlan{}, fmt.Errorf(
-				"%s is neither a build-time nor a run-time variable, so there is nowhere to "+
-					"deliver it and nowhere to keep it", key)
+				"%s ne derleme zamanı ne de çalışma zamanı değişkeni, yani onu teslim edecek "+
+					"bir yer de saklayacak bir yer de yok", key)
 		case v.Secret && v.Build:
 			// Not a missing field. Builds run in their own namespace and a
 			// Secret in the tenant's is not reachable from there, so the value
@@ -496,15 +496,15 @@ func planSettings(req wireSettings, current platformv1alpha1.Workload) (settings
 			// that can read it — and nothing in this platform can read a
 			// secret, deliberately.
 			return settingsPlan{}, fmt.Errorf(
-				"%s cannot be a build-time secret: builds run in their own namespace and "+
-					"nothing here can copy a value into it", key)
+				"%s derleme zamanı sırrı olamaz: derlemeler kendi namespace'lerinde çalışır ve "+
+					"buradaki hiçbir şey oraya bir değer kopyalayamaz", key)
 		case v.Secret && v.Value != nil && *v.Value == "":
 			return settingsPlan{}, fmt.Errorf(
-				"a secret with an empty value is not a secret: leave %s out of the list to "+
-					"remove it, or send a value", key)
+				"değeri boş olan bir sır, sır değildir: %s değişkenini kaldırmak için listeden "+
+					"çıkarın ya da bir değer gönderin", key)
 		case !v.Secret && v.Value == nil:
 			return settingsPlan{}, fmt.Errorf(
-				"%s has no value: send one, and send \"\" if that is what it should be", key)
+				"%s bir değer taşımıyor: bir değer gönderin, boş olması gerekiyorsa \"\" gönderin", key)
 		}
 		seen[key] = true
 
@@ -512,7 +512,7 @@ func planSettings(req wireSettings, current platformv1alpha1.Workload) (settings
 		case v.Secret:
 			if v.Value == nil && !slices.Contains(current.Spec.UserSecrets, key) {
 				return settingsPlan{}, fmt.Errorf(
-					"%s is new and has no value: a secret that was never set cannot be kept", key)
+					"%s yeni ve bir değeri yok: hiç ayarlanmamış bir sır korunamaz", key)
 			}
 			app.Spec.UserSecrets = append(app.Spec.UserSecrets, key)
 			if v.Value != nil {
@@ -567,27 +567,27 @@ func planHealth(h wireHealth) (platformv1alpha1.Health, error) {
 		what, path string
 	}{{"liveness", out.LivenessPath}, {"readiness", out.ReadinessPath}} {
 		if p.path != "" && !strings.HasPrefix(p.path, "/") {
-			return out, fmt.Errorf("the %s path has to start with /", p.what)
+			return out, fmt.Errorf("%s yolu / ile başlamalı", p.what)
 		}
 	}
 	for _, f := range []struct {
 		what      string
 		v, lo, hi int32
 	}{
-		{"health port", out.Port, 1, 65535},
-		{"probe interval", out.IntervalSeconds, 1, 300},
-		{"probe timeout", out.TimeoutSeconds, 1, 60},
-		{"failure threshold", out.FailureThreshold, 1, 20},
+		{"sağlık portu", out.Port, 1, 65535},
+		{"prob aralığı", out.IntervalSeconds, 1, 300},
+		{"prob zaman aşımı", out.TimeoutSeconds, 1, 60},
+		{"hata eşiği", out.FailureThreshold, 1, 20},
 	} {
 		if f.v != 0 && (f.v < f.lo || f.v > f.hi) {
-			return out, fmt.Errorf("the %s has to be between %d and %d", f.what, f.lo, f.hi)
+			return out, fmt.Errorf("%s %d ile %d arasında olmalı", f.what, f.lo, f.hi)
 		}
 	}
 	if out.TimeoutSeconds != 0 && out.IntervalSeconds != 0 && out.TimeoutSeconds > out.IntervalSeconds {
 		// The API server would refuse this after the commit, with the CRD's own
 		// words and a commit already pushed.
 		return out, errors.New(
-			"the probe timeout cannot be longer than the interval between probes")
+			"prob zaman aşımı, problar arasındaki aralıktan uzun olamaz")
 	}
 	return out, nil
 }
@@ -599,19 +599,19 @@ func planResources(r wireResources, current platformv1alpha1.Resources) (platfor
 		in    string
 		field *resource.Quantity
 	}{
-		{"CPU request", r.CPURequest, &out.CPURequest},
-		{"memory request", r.MemoryRequest, &out.MemoryRequest},
-		{"memory limit", r.MemoryLimit, &out.MemoryLimit},
+		{"CPU isteği", r.CPURequest, &out.CPURequest},
+		{"bellek isteği", r.MemoryRequest, &out.MemoryRequest},
+		{"bellek limiti", r.MemoryLimit, &out.MemoryLimit},
 	} {
 		if strings.TrimSpace(f.in) == "" {
 			continue
 		}
 		q, err := resource.ParseQuantity(f.in)
 		if err != nil {
-			return out, fmt.Errorf("the %s %q is not a quantity: 100m and 512Mi are", f.what, f.in)
+			return out, fmt.Errorf("%s olarak verilen %q bir miktar değil: 100m ve 512Mi birer miktar", f.what, f.in)
 		}
 		if q.Sign() <= 0 {
-			return out, fmt.Errorf("the %s has to be more than zero", f.what)
+			return out, fmt.Errorf("%s sıfırdan büyük olmalı", f.what)
 		}
 		*f.field = q
 	}
@@ -619,7 +619,7 @@ func planResources(r wireResources, current platformv1alpha1.Resources) (platfor
 		out.MemoryLimit.Cmp(out.MemoryRequest) < 0 {
 		// The kubelet refuses the pod, so this would be a commit that applies
 		// and never runs.
-		return out, fmt.Errorf("the memory limit (%s) is below the memory request (%s)",
+		return out, fmt.Errorf("bellek limiti (%s) bellek isteğinin (%s) altında",
 			out.MemoryLimit.String(), out.MemoryRequest.String())
 	}
 	return out, nil
@@ -673,7 +673,7 @@ func renderSettings(place placement.Placement, want platformv1alpha1.Workload) r
 		}
 		app, err := manifest.Parse(body)
 		if err != nil {
-			return nil, fmt.Errorf("the committed manifest cannot be read: %w", err)
+			return nil, fmt.Errorf("commit edilmiş manifest okunamıyor: %w", err)
 		}
 
 		// The settings, and only the settings. Everything else on the spec is

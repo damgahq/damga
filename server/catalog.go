@@ -238,7 +238,7 @@ func installFromCatalog(g guard, st stores) http.Handler {
 
 		var req installRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody)).Decode(&req); err != nil {
-			problem(w, http.StatusBadRequest, "the request body is not the expected JSON")
+			problem(w, http.StatusBadRequest, "istek gövdesi beklenen JSON değil")
 			return
 		}
 		req.Template = strings.TrimSpace(req.Template)
@@ -247,7 +247,7 @@ func installFromCatalog(g guard, st stores) http.Handler {
 		req.Path, req.Domain = strings.TrimSpace(req.Path), strings.TrimSpace(req.Domain)
 
 		if req.Template == "" {
-			problem(w, http.StatusBadRequest, "an install needs the name of a template")
+			problem(w, http.StatusBadRequest, "bir kurulum için şablonun adı gerekir")
 			return
 		}
 		// The same three shapes createApp checks, for the same reason: an app
@@ -255,21 +255,21 @@ func installFromCatalog(g guard, st stores) http.Handler {
 		// cluster and refused by the API server, where the failure is a
 		// rollout that never appears rather than a sentence anybody can read.
 		for _, f := range []struct{ what, value string }{
-			{"app name", ref.App},
-			{"environment", ref.Env},
+			{"uygulama adı", ref.App},
+			{"ortam", ref.Env},
 			{fieldNamespace, req.Namespace},
 		} {
 			if f.value == "" {
-				problem(w, http.StatusBadRequest, "an install needs an app name, an environment and a namespace")
+				problem(w, http.StatusBadRequest, "bir kurulum için uygulama adı, ortam ve namespace gerekir")
 				return
 			}
 			if msgs := validation.IsDNS1123Label(f.value); len(msgs) > 0 {
-				problem(w, http.StatusBadRequest, "the "+f.what+" is not usable in Kubernetes: "+msgs[0])
+				problem(w, http.StatusBadRequest, f.what+" Kubernetes'te kullanılamaz: "+msgs[0])
 				return
 			}
 		}
 		if req.RepoURL == "" {
-			problem(w, http.StatusBadRequest, "an install needs a repository to write its manifests to")
+			problem(w, http.StatusBadRequest, "bir kurulum için manifest'lerinin yazılacağı bir depo gerekir")
 			return
 		}
 
@@ -280,7 +280,7 @@ func installFromCatalog(g guard, st stores) http.Handler {
 		if req.VolumeSize != "" {
 			size, err := resource.ParseQuantity(req.VolumeSize)
 			if err != nil {
-				problem(w, http.StatusBadRequest, "volumeSize is not a quantity: "+err.Error())
+				problem(w, http.StatusBadRequest, "volumeSize bir miktar değil: "+err.Error())
 				return
 			}
 			opts.VolumeSize = size
@@ -351,10 +351,10 @@ func installFromCatalog(g guard, st stores) http.Handler {
 		// that already exists is a 409 rather than a live app silently
 		// repointed at a template.
 		if _, err := st.placement.Get(r.Context(), ref.TenantID, ref.App, ref.Env); err == nil {
-			problem(w, http.StatusConflict, "this app and environment already exist")
+			problem(w, http.StatusConflict, "bu uygulama ve ortam zaten var")
 			return
 		} else if !errors.Is(err, placement.ErrNotFound) {
-			problem(w, http.StatusInternalServerError, "reading the placement failed")
+			problem(w, http.StatusInternalServerError, "yerleşim kaydı okunamadı")
 			return
 		}
 
@@ -374,7 +374,7 @@ func installFromCatalog(g guard, st stores) http.Handler {
 			problem(w, http.StatusConflict, err.Error())
 			return
 		case err != nil:
-			problem(w, http.StatusInternalServerError, "writing the placement failed")
+			problem(w, http.StatusInternalServerError, "yerleşim kaydı yazılamadı")
 			return
 		}
 
@@ -407,8 +407,8 @@ func installFromCatalog(g guard, st stores) http.Handler {
 			// would suggest there is nothing to clean up, while the app is
 			// registered and its next deploy would go somewhere real.
 			problem(w, http.StatusBadGateway,
-				"the app was registered but its manifests were not committed, so nothing is "+
-					"running yet: "+err.Error())
+				"uygulama kaydedildi ama manifest'leri commit edilmedi, yani henüz çalışan bir "+
+					"şey yok: "+err.Error())
 			return
 		}
 
@@ -416,7 +416,7 @@ func installFromCatalog(g guard, st stores) http.Handler {
 		// Until this existed the endpoint answered 201 for an install that
 		// would never run — the manifests were correct, in the right
 		// repository, and nothing was watching it.
-		delivered := "the manifests are committed and an Argo CD Application is watching them"
+		delivered := "manifest'ler commit edildi ve bir Argo CD Application onları izliyor"
 		note, err := deliverPlacement(r.Context(), st, place)
 		switch {
 		case err != nil:
@@ -424,9 +424,9 @@ func installFromCatalog(g guard, st stores) http.Handler {
 			// manifests are pushed, and both survive. What is missing is the
 			// thing that applies them, and saying which half is missing is the
 			// difference between "retry the install" and "look at Argo CD".
-			delivered = "the manifests are committed and nothing is applying them yet: " + err.Error()
+			delivered = "manifest'ler commit edildi ve henüz hiçbir şey onları uygulamıyor: " + err.Error()
 		case note != "":
-			delivered += ", but " + note
+			delivered += ", ancak " + note
 		}
 
 		w.WriteHeader(http.StatusCreated)
@@ -482,8 +482,8 @@ func plannedSecrets(p catalog.Plan) (map[string][]platformv1alpha1.GeneratedSecr
 			// mint a password and hand it over as the whole URL.
 			if len(key.Sources) != 1 || key.Template != "${"+key.Sources[0].Name+"}" {
 				refusals = append(refusals, fmt.Sprintf(
-					"%s is built around %d generated value(s) rather than being one, and the "+
-						"platform mints values rather than assembling strings: %s",
+					"%s üretilen bir değerin kendisi değil, %d üretilen değerin çevresinde "+
+						"kuruluyor, ve platform değer üretiyor, dizi birleştirmiyor: %s",
 					key.Name, len(key.Sources), key.Template))
 				continue
 			}
@@ -501,8 +501,8 @@ func plannedSecrets(p catalog.Plan) (map[string][]platformv1alpha1.GeneratedSecr
 			// and 111 of the 369 templates that parse share one.
 			if first, taken := claimed[src.Name]; taken {
 				refusals = append(refusals, fmt.Sprintf(
-					"%s and %s are both %s and have to receive the same value; the platform "+
-						"mints one value per variable, so they would receive two",
+					"%s ve %s ikisi de %s ve aynı değeri almaları gerekiyor; platform değişken "+
+						"başına bir değer ürettiği için iki farklı değer alırlardı",
 					first, key.Name, src.Name))
 				continue
 			}
@@ -510,14 +510,14 @@ func plannedSecrets(p catalog.Plan) (map[string][]platformv1alpha1.GeneratedSecr
 			kind, ok := generatedKind(src.Kind)
 			if !ok {
 				refusals = append(refusals, fmt.Sprintf(
-					"%s asks for a %q value, and the platform makes passwords, hex and base64",
+					"%s %q türünde bir değer istiyor, platform ise parola, hex ve base64 üretiyor",
 					key.Name, src.Kind))
 				continue
 			}
 			if !envName.MatchString(key.Name) || len(key.Name) > 64 {
 				refusals = append(refusals, fmt.Sprintf(
-					"%s is not a name the Workload API accepts for a generated value; it takes "+
-						"an upper-case environment variable name", key.Name))
+					"%s, Workload API'sinin üretilen bir değer için kabul ettiği bir ad değil; "+
+						"büyük harfli bir ortam değişkeni adı alıyor", key.Name))
 				continue
 			}
 
@@ -533,7 +533,7 @@ func plannedSecrets(p catalog.Plan) (map[string][]platformv1alpha1.GeneratedSecr
 	for owner, want := range out {
 		if len(want) > maxGeneratedSecrets {
 			refusals = append(refusals, fmt.Sprintf(
-				"%s asks for %d generated values and a workload holds %d",
+				"%s %d üretilen değer istiyor, bir workload ise %d taşıyor",
 				owner, len(want), maxGeneratedSecrets))
 		}
 	}
@@ -659,8 +659,8 @@ func renderInstall(
 	return func(rolloutID string, current map[string][]byte) (map[string][]byte, error) {
 		if _, taken := current[manifest.File]; taken {
 			return nil, fmt.Errorf(
-				"%s already holds a committed manifest; installing over it would replace an "+
-					"app that exists", place.Path)
+				"%s zaten commit edilmiş bir manifest taşıyor; üzerine kurmak var olan bir "+
+					"uygulamanın yerine geçerdi", place.Path)
 		}
 
 		// The container, in the same commit as what goes in it. Argo CD applies
@@ -793,7 +793,7 @@ func withoutPlannedSecrets(envFrom []string, plan catalog.Plan) []string {
 func requireCatalog(w http.ResponseWriter, st stores) (CatalogSource, bool) {
 	if st.catalog == nil {
 		problem(w, http.StatusServiceUnavailable,
-			"this installation has no catalogue: no templates are mounted and -catalog-dir is unset")
+			"bu kurulumun kataloğu yok: hiçbir şablon mount edilmemiş ve -catalog-dir ayarlanmamış")
 		return nil, false
 	}
 	return st.catalog, true

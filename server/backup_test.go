@@ -141,7 +141,7 @@ func TestAnAppWithNoDatabaseIsNotAnError(t *testing.T) {
 	if code != http.StatusNotFound {
 		t.Errorf("an app with no database = %d, want 404", code)
 	}
-	if !strings.Contains(body, "not connected to a database") {
+	if !strings.Contains(body, "bir veritabanına bağlı değil") {
 		t.Errorf("the answer does not say which of the two it is: %s", body)
 	}
 }

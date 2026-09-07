@@ -1027,7 +1027,7 @@ func TestADeployWithNoPlacementSaysWhatIsMissing(t *testing.T) {
 	if status != http.StatusConflict {
 		t.Errorf("deploy without a placement = %d %q, want 409", status, body)
 	}
-	if !strings.Contains(body, "repository") {
+	if !strings.Contains(body, "bir depo tanımlı değil") {
 		t.Errorf("the refusal does not say what is missing: %s", body)
 	}
 }

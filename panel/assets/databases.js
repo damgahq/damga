@@ -27,9 +27,9 @@ function databasesUrl(base) {
 // a comment, because "not shown" and "not there" look identical to a reader
 // and only one of them is a promise.
 const CREDENTIALS_NOTE =
-  "the username and password are generated into a Secret your application reads. " +
-  "They are not in git and this page never sees them: there is no rollback to a " +
-  "value git never held, and if the Secret is deleted nothing puts it back";
+  "kullanıcı adı ve parola, uygulamanızın okuduğu bir Secret'a üretilir. Bunlar " +
+  "git'te değil ve bu sayfa onları hiç görmez: git'in hiç tutmadığı bir değere " +
+  "geri dönüş yoktur, ve Secret silinirse hiçbir şey onu geri koymaz";
 
 function credentialsView(db) {
   return {
@@ -37,8 +37,8 @@ function credentialsView(db) {
     shown: false,
     secretName: (db && db.secretName) || "",
     text: db && db.secretName
-      ? `in the Secret ${db.secretName}`
-      : "in a Secret this page does not read",
+      ? `${db.secretName} Secret'ında`
+      : "bu sayfanın okumadığı bir Secret'ta",
     warning: CREDENTIALS_NOTE,
     inGit: false,
   };
@@ -66,9 +66,9 @@ function claimsView(claims, wanted = 1) {
   if (wanted > left) {
     return {
       state: "over",
-      text: `this would take ${wanted} of the ${left} volume ${left === 1 ? "claim" : "claims"} ` +
-        `left here, and the namespace allows ${budget} in total. The commit will be made ` +
-        "and the cluster will refuse it when Argo CD syncs",
+      text: `bu, burada kalan ${left} volume claim'inden ${wanted} tanesini alırdı, ` +
+        `ve namespace toplam ${budget} taneye izin veriyor. Commit yapılacak ` +
+        "ve Argo CD sync ettiğinde küme onu reddedecek",
       ok: false,
       left,
     };
@@ -76,14 +76,14 @@ function claimsView(claims, wanted = 1) {
   if (wanted === left) {
     return {
       state: "last",
-      text: `this takes the last of the ${budget} volume claims this namespace allows`,
+      text: `bu, namespace'in izin verdiği ${budget} volume claim'inin sonuncusunu alır`,
       ok: null,
       left,
     };
   }
   return {
     state: "room",
-    text: `this takes ${wanted} of ${budget} volume claims; ${left} are free here`,
+    text: `bu, ${budget} volume claim'inin ${wanted} tanesini alır; burada ${left} tanesi boş`,
     ok: true,
     left,
   };
@@ -108,11 +108,11 @@ function refusalText(status, body) {
   if (detail) return detail;
   switch (status) {
     case 403:
-      return "removing a database is owner-only, and this account is not an owner";
+      return "veritabanı kaldırmak yalnızca sahibe açıktır, ve bu hesap sahip değil";
     case 404:
-      return "this app and environment have no repository configured yet";
+      return "bu uygulama ve ortam için henüz bir depo tanımlı değil";
     default:
-      return `the request was refused with ${status} and no detail`;
+      return `istek ${status} ile ve hiçbir ayrıntı vermeden reddedildi`;
   }
 }
 
@@ -128,7 +128,7 @@ function refusalText(status, body) {
 // none.
 function removedText(body) {
   const note = body && typeof body.note === "string" ? body.note : "";
-  return note || "the database was withdrawn. Its volumes are not deleted by this.";
+  return note || "veritabanı geri çekildi. Volume'leri bununla silinmez.";
 }
 
 // mountDatabases renders the view into el and returns a stop function.
@@ -173,27 +173,27 @@ function mountDatabases(el, base, options = {}) {
   };
 
   const engine = doc.createElement("select");
-  engine.setAttribute("aria-label", "Engine");
+  engine.setAttribute("aria-label", "Motor");
   for (const value of ["postgres", "redis"]) {
     const option = doc.createElement("option");
     option.value = value;
     option.textContent = value;
     engine.append(option);
   }
-  const name = field("name", "Name", "", "main");
-  const image = field("image", "Image", "postgres:17.2");
-  const storage = field("storage", "Storage", "5Gi");
+  const name = field("name", "Ad", "", "main");
+  const image = field("image", "İmaj", "postgres:17.2");
+  const storage = field("storage", "Depolama", "5Gi");
   const backups = doc.createElement("input");
   backups.type = "checkbox";
-  backups.setAttribute("aria-label", "Take backups");
-  const backupStorage = field("backupStorage", "Backup volume", "2Gi");
+  backups.setAttribute("aria-label", "Yedek al");
+  const backupStorage = field("backupStorage", "Yedek volume'ü", "2Gi");
   const cost = doc.createElement("p");
   cost.className = "db-cost";
   const create = doc.createElement("button");
   create.type = "submit";
-  create.textContent = "Create";
+  create.textContent = "Oluştur";
 
-  const backupsLabel = node("label", {}, backups, "backups, with a restore rehearsal");
+  const backupsLabel = node("label", {}, backups, "geri yükleme provasıyla birlikte yedek");
   form.replaceChildren(engine, name, image, storage, backupsLabel, backupStorage, create, cost);
 
   const paintCost = () => {
@@ -216,50 +216,50 @@ function mountDatabases(el, base, options = {}) {
       const remove = doc.createElement("button");
       remove.type = "button";
       remove.className = "link";
-      remove.textContent = "Remove";
+      remove.textContent = "Kaldır";
       remove.addEventListener("click", () => void withdraw(db.name));
 
       row.append(
         node("strong", {}, db.name),
         node("span", { class: "muted" }, `${db.engine} · ${db.image} · ${db.storage}`),
         node("span", { class: "muted" },
-          `${db.claims} volume ${db.claims === 1 ? "claim" : "claims"}`),
+          `${db.claims} volume claim'i`),
         remove,
         node("p", { class: "db-credentials", "data-state": creds.state },
           `${creds.text} — ${creds.warning}`),
       );
       if (db.backups) {
         row.append(node("p", { class: "muted" },
-          `backups ${db.backups.schedule}, kept ${db.backups.retainDays} days` +
-          (db.backups.rehearse ? ", restored and counted to prove they work" : "")));
+          `yedek ${db.backups.schedule}, ${db.backups.retainDays} gün saklanıyor` +
+          (db.backups.rehearse ? ", çalıştıkları kanıtlansın diye geri yüklenip sayılıyor" : "")));
       }
       return row;
     }));
   };
 
   async function load() {
-    status.textContent = "loading…";
+    status.textContent = "yükleniyor…";
     status.dataset.ok = "null";
     try {
       const response = await fetcher(databasesUrl(base), { method: "GET" });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
         showRefusal(refusalText(response.status, body));
-        status.textContent = "these databases could not be read";
+        status.textContent = "bu veritabanları okunamadı";
         status.dataset.ok = "false";
         return;
       }
       const databases = (body && body.databases) || [];
       claims = (body && body.claims) || null;
       status.textContent = databases.length
-        ? `${databases.length} ${databases.length === 1 ? "database" : "databases"}`
-        : "no databases yet";
+        ? `${databases.length} veritabanı`
+        : "henüz veritabanı yok";
       status.dataset.ok = "true";
       draw(databases);
       paintCost();
     } catch (err) {
       showRefusal(String((err && err.message) || err));
-      status.textContent = "these databases could not be read";
+      status.textContent = "bu veritabanları okunamadı";
       status.dataset.ok = "false";
     }
   }

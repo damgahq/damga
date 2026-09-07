@@ -64,7 +64,7 @@ func (g guard) admit(
 
 	live, err := g.sessions.Resolve(r.Context(), r)
 	if err != nil {
-		problem(w, http.StatusUnauthorized, "not signed in")
+		problem(w, http.StatusUnauthorized, "giriş yapılmadı")
 		return authz.Subject{}, ref, false
 	}
 
@@ -73,7 +73,7 @@ func (g guard) admit(
 		// Deliberately the same answer as a refusal. "You are signed in but
 		// not a member here" confirms the tenant exists, which is the one
 		// thing a stranger probing tenant names wants to learn.
-		problem(w, http.StatusForbidden, "no access to this tenant")
+		problem(w, http.StatusForbidden, "bu kiracıya erişim yok")
 		return authz.Subject{}, ref, false
 	}
 
@@ -81,7 +81,7 @@ func (g guard) admit(
 		Tenant: ref.TenantID, App: ref.App, Env: ref.Env,
 	})
 	if err != nil {
-		problem(w, http.StatusInternalServerError, "authorization failed")
+		problem(w, http.StatusInternalServerError, "yetkilendirme başarısız oldu")
 		return authz.Subject{}, ref, false
 	}
 	if !decision.Allow {
@@ -110,7 +110,7 @@ func (o Options) me(idStore identity.Store, sess *auth.Sessions) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		live, err := sess.Resolve(r.Context(), r)
 		if err != nil {
-			problem(w, http.StatusUnauthorized, "not signed in")
+			problem(w, http.StatusUnauthorized, "giriş yapılmadı")
 			return
 		}
 		account, err := idStore.Account(r.Context(), live.AccountID)
@@ -118,12 +118,12 @@ func (o Options) me(idStore identity.Store, sess *auth.Sessions) http.Handler {
 			// A session whose account was deleted or disabled since it was
 			// issued. Not signed in, as far as anything downstream is
 			// concerned.
-			problem(w, http.StatusUnauthorized, "not signed in")
+			problem(w, http.StatusUnauthorized, "giriş yapılmadı")
 			return
 		}
 		rows, err := idStore.Memberships(r.Context(), account.ID)
 		if err != nil {
-			problem(w, http.StatusInternalServerError, "the identity store is unavailable")
+			problem(w, http.StatusInternalServerError, "kimlik deposu kullanılamıyor")
 			return
 		}
 
@@ -141,7 +141,7 @@ func (o Options) me(idStore identity.Store, sess *auth.Sessions) http.Handler {
 				// answer 200 with an empty list — "you are a member of
 				// nothing", which reads as a permissions problem and sends
 				// the reader somewhere the fault is not.
-				problem(w, http.StatusInternalServerError, "the identity store is unavailable")
+				problem(w, http.StatusInternalServerError, "kimlik deposu kullanılamıyor")
 				return
 			}
 			out = append(out, membership{
@@ -178,7 +178,7 @@ func history(g guard, st stores) http.Handler {
 		if raw := r.URL.Query().Get("limit"); raw != "" {
 			n, err := strconv.Atoi(raw)
 			if err != nil || n < 1 {
-				problem(w, http.StatusBadRequest, "limit must be a positive whole number")
+				problem(w, http.StatusBadRequest, "limit pozitif bir tam sayı olmalı")
 				return
 			}
 			limit = min(n, maxHistoryPage)
@@ -194,10 +194,10 @@ func history(g guard, st stores) http.Handler {
 			// A cursor the store cannot resolve. The caller sent it, so this
 			// is a 400 — answering 500 tells them the server is broken and
 			// they should retry, and it is not and they should not.
-			problem(w, http.StatusBadRequest, "that page cursor is not one this log issued")
+			problem(w, http.StatusBadRequest, "bu sayfa imleci bu kaydın verdiği bir imleç değil")
 			return
 		case err != nil:
-			problem(w, http.StatusInternalServerError, "reading the evidence store failed")
+			problem(w, http.StatusInternalServerError, "kanıt deposu okunamadı")
 			return
 		}
 		// An app with no deploys is an empty page, not a 404. Current answers
@@ -226,7 +226,7 @@ func verify(g guard, st stores) http.Handler {
 		proof, err := st.evidence.Verify(r.Context(), ref,
 			evidence.Cursor(q.Get("from")), evidence.Cursor(q.Get("to")))
 		if err != nil {
-			problem(w, http.StatusInternalServerError, "verifying the chain failed")
+			problem(w, http.StatusInternalServerError, "zincir doğrulanamadı")
 			return
 		}
 		// A broken chain is a 200 carrying valid=false, not a 5xx. It is an
@@ -247,7 +247,7 @@ func retention(g guard, st stores) http.Handler {
 		}
 		policy, err := st.evidence.Retention(r.Context())
 		if err != nil {
-			problem(w, http.StatusInternalServerError, "reading the retention policy failed")
+			problem(w, http.StatusInternalServerError, "saklama politikası okunamadı")
 			return
 		}
 		writeJSON(w, map[string]any{
@@ -293,7 +293,7 @@ func export(g guard, st stores) http.Handler {
 		// named .csv, carrying JSONL.
 		const format = evidence.ExportJSONL
 		if got := r.URL.Query().Get("format"); got != "" && got != string(format) {
-			problem(w, http.StatusBadRequest, "the only export format is jsonl")
+			problem(w, http.StatusBadRequest, "tek dışa aktarma biçimi jsonl")
 			return
 		}
 
@@ -326,15 +326,15 @@ func export(g guard, st stores) http.Handler {
 // the point rather than an inconsistency to smooth over.
 const (
 	// Placed and deployed to: the ordinary case.
-	appDeployed = "deployed"
+	appDeployed = "deploy edildi"
 	// Placed and never deployed to. This is what an app looks like between
 	// POST /apps and the first deploy, and it is why this endpoint reads the
 	// placement store at all.
-	appNeverDeployed = "never deployed"
+	appNeverDeployed = "hiç deploy edilmedi"
 	// Deployed to, and no longer placed. DELETE /apps/{app} removes the record
 	// and not the app, so its history outlives its registration — and something
 	// is running that the control plane can no longer deploy to.
-	appRecordRemoved = "record removed"
+	appRecordRemoved = "kaydı silindi"
 )
 
 // wireApp is one app environment as this list reports it.
@@ -382,12 +382,12 @@ func apps(g guard, st stores) http.Handler {
 
 		placed, err := st.placement.List(r.Context(), ref.TenantID)
 		if err != nil {
-			problem(w, http.StatusInternalServerError, "reading the placements failed")
+			problem(w, http.StatusInternalServerError, "yerleşim kayıtları okunamadı")
 			return
 		}
 		refs, err := st.evidence.Refs(r.Context(), ref.TenantID)
 		if err != nil {
-			problem(w, http.StatusInternalServerError, "reading the evidence store failed")
+			problem(w, http.StatusInternalServerError, "kanıt deposu okunamadı")
 			return
 		}
 

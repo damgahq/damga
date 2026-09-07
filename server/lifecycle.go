@@ -113,7 +113,7 @@ func rollbackRoute(g guard, st stores) http.Handler {
 
 		seq, err := strconv.ParseInt(r.PathValue("seq"), 10, 64)
 		if err != nil || seq < 1 {
-			problem(w, http.StatusBadRequest, "a deploy number is a positive whole number")
+			problem(w, http.StatusBadRequest, "deploy numarası pozitif bir tam sayıdır")
 			return
 		}
 
@@ -121,7 +121,7 @@ func rollbackRoute(g guard, st stores) http.Handler {
 		switch {
 		case errors.Is(err, errNoSuchDeploy):
 			problem(w, http.StatusNotFound,
-				fmt.Sprintf("this app and environment have no deploy %d", seq))
+				fmt.Sprintf("bu uygulama ve ortamda %d numaralı deploy yok", seq))
 			return
 		case errors.Is(err, errTooFarBack):
 			// Not a 404: the deploy may well exist. Saying which is the
@@ -129,11 +129,11 @@ func rollbackRoute(g guard, st stores) http.Handler {
 			// cannot reach that far back", and only the second is fixed by
 			// giving evidence.Query a way to ask for one sequence number.
 			problem(w, http.StatusNotImplemented,
-				fmt.Sprintf("deploy %d is more than %d deploys back, which this installation cannot reach",
+				fmt.Sprintf("%d numaralı deploy %d deploy'dan daha geride kaldı; bu kurulum o kadar geriye ulaşamıyor",
 					seq, maxRollbackScan))
 			return
 		case err != nil:
-			problem(w, http.StatusInternalServerError, "reading the evidence store failed")
+			problem(w, http.StatusInternalServerError, "kanıt deposu okunamadı")
 			return
 		}
 
@@ -145,12 +145,12 @@ func rollbackRoute(g guard, st stores) http.Handler {
 			// them — refusing those would make rollback unusable on exactly
 			// the installs whose control plane is outside the cluster.
 			problem(w, http.StatusConflict,
-				fmt.Sprintf("deploy %d never ran: it is recorded as %s", seq, target.State))
+				fmt.Sprintf("%d numaralı deploy hiç çalışmadı: kayıtta durumu %s", seq, target.State))
 			return
 		}
 		if target.Image.RequestedRef == "" {
 			problem(w, http.StatusConflict,
-				fmt.Sprintf("deploy %d records no image, so there is nothing to restore", seq))
+				fmt.Sprintf("%d numaralı deploy hiçbir imaj kaydetmemiş, yani geri getirilecek bir şey yok", seq))
 			return
 		}
 
@@ -203,11 +203,11 @@ func scaleRoute(g guard, st stores) http.Handler {
 
 		var req scaleRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody)).Decode(&req); err != nil {
-			problem(w, http.StatusBadRequest, "the request body is not the expected JSON")
+			problem(w, http.StatusBadRequest, "istek gövdesi beklenen JSON değil")
 			return
 		}
 		if req.Replicas == nil {
-			problem(w, http.StatusBadRequest, "a scale needs a replica count")
+			problem(w, http.StatusBadRequest, "ölçekleme için bir replika sayısı gerekiyor")
 			return
 		}
 		if *req.Replicas < 1 {
@@ -217,7 +217,7 @@ func scaleRoute(g guard, st stores) http.Handler {
 			// express a stopped app, and inventing one here would put it in
 			// half the platform.
 			problem(w, http.StatusBadRequest,
-				"a workload runs at least one replica; this endpoint cannot stop an app")
+				"bir workload en az bir replika çalıştırır; bu uç bir uygulamayı durduramaz")
 			return
 		}
 
@@ -278,15 +278,15 @@ func restartRoute(g guard, st stores) http.Handler {
 		if _, err := st.placement.Get(r.Context(), ref.TenantID, ref.App, ref.Env); err != nil {
 			if errors.Is(err, placement.ErrNotFound) {
 				problem(w, http.StatusNotFound,
-					"this app and environment have no repository configured yet")
+					"bu uygulama ve ortam için henüz bir depo tanımlı değil")
 				return
 			}
-			problem(w, http.StatusInternalServerError, "reading the placement failed")
+			problem(w, http.StatusInternalServerError, "yerleşim kaydı okunamadı")
 			return
 		}
 		problem(w, http.StatusNotImplemented,
-			"this installation cannot restart an app: a restart is a change to the pod template, "+
-				"the only write path is git, and no field of a Workload reaches the pod template")
+			"bu kurulum bir uygulamayı yeniden başlatamıyor: yeniden başlatma pod şablonunda bir "+
+				"değişikliktir, tek yazma yolu git'tir, ve bir Workload'ın hiçbir alanı pod şablonuna ulaşmaz")
 	})
 }
 
@@ -310,10 +310,10 @@ func commitChange(
 	switch {
 	case errors.Is(err, placement.ErrNotFound):
 		problem(w, http.StatusConflict,
-			"this app and environment have no repository configured yet")
+			"bu uygulama ve ortam için henüz bir depo tanımlı değil")
 		return
 	case err != nil:
-		problem(w, http.StatusInternalServerError, "reading the placement failed")
+		problem(w, http.StatusInternalServerError, "yerleşim kaydı okunamadı")
 		return
 	}
 
@@ -338,16 +338,16 @@ func commitChange(
 	})
 	switch {
 	case errors.Is(err, gitwrite.ErrNoChange):
-		problem(w, http.StatusConflict, "this is already what is committed")
+		problem(w, http.StatusConflict, "commit edilmiş olan zaten bu")
 		return
 	case errors.Is(err, errNothingDeployed):
 		problem(w, http.StatusConflict,
-			"nothing is deployed here yet, so there is nothing to change")
+			"buraya henüz hiçbir şey deploy edilmedi, yani değiştirilecek bir şey yok")
 		return
 	case errors.Is(err, errAutoscaled):
 		problem(w, http.StatusConflict,
-			"this app autoscales, so its replica count is the autoscaler's; "+
-				"change the autoscale range instead")
+			"bu uygulama otomatik ölçekleniyor, yani replika sayısı otomatik ölçekleyicinin; "+
+				"onun yerine otomatik ölçekleme aralığını değiştirin")
 		return
 	case errors.Is(err, errDatabaseExists):
 		problem(w, http.StatusConflict, err.Error())
@@ -360,11 +360,11 @@ func commitChange(
 		return
 	case errors.Is(err, errPinnedByVolumes):
 		problem(w, http.StatusConflict,
-			"this app has a persistent volume, so it runs exactly one replica: "+
-				"its storage can be mounted by one node at a time")
+			"bu uygulamanın kalıcı bir volume'ü var, bu yüzden tam olarak bir replika çalıştırıyor: "+
+				"deposu aynı anda tek bir node tarafından mount edilebilir")
 		return
 	case err != nil:
-		problem(w, http.StatusBadGateway, "the commit could not be pushed: "+err.Error())
+		problem(w, http.StatusBadGateway, "commit push edilemedi: "+err.Error())
 		return
 	}
 
@@ -426,7 +426,7 @@ func renderScale(place placement.Placement, replicas int32) renderFunc {
 		}
 		app, err := manifest.Parse(body)
 		if err != nil {
-			return nil, fmt.Errorf("the committed manifest cannot be read: %w", err)
+			return nil, fmt.Errorf("commit edilmiş manifest okunamıyor: %w", err)
 		}
 		if app.Spec.Autoscale != nil {
 			return nil, errAutoscaled

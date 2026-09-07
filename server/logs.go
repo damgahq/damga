@@ -150,7 +150,7 @@ func logStream(g guard, st stores, open func() (LogSource, error)) http.Handler 
 			// browser that was made to ask, not the person whose cookie it
 			// carried, and answering "not signed in" to a cross-origin probe
 			// tells it whether the cookie was any good.
-			problem(w, http.StatusForbidden, "cross-origin request refused")
+			problem(w, http.StatusForbidden, "çapraz kaynaklı istek reddedildi")
 			return
 		}
 		_, ref, ok := g.admit(w, r, authz.ActionAppView)
@@ -167,10 +167,10 @@ func logStream(g guard, st stores, open func() (LogSource, error)) http.Handler 
 		place, err := st.placement.Get(r.Context(), ref.TenantID, ref.App, ref.Env)
 		switch {
 		case errors.Is(err, placement.ErrNotFound):
-			problem(w, http.StatusNotFound, "this app and environment have no repository configured yet")
+			problem(w, http.StatusNotFound, "bu uygulama ve ortam için henüz bir depo tanımlı değil")
 			return
 		case err != nil:
-			problem(w, http.StatusInternalServerError, "reading the placement failed")
+			problem(w, http.StatusInternalServerError, "yerleşim kaydı okunamadı")
 			return
 		}
 		sel.Namespace, sel.App = place.Namespace, ref.App
@@ -183,7 +183,7 @@ func logStream(g guard, st stores, open func() (LogSource, error)) http.Handler 
 			// indistinguishable from an application that is saying nothing.
 			slog.Warn("log streaming is unavailable", "error", err)
 			problem(w, http.StatusNotImplemented,
-				"this installation cannot read logs from the cluster")
+				"bu kurulum kümeden log okuyamıyor")
 			return
 		}
 
@@ -286,7 +286,7 @@ func streamSSE(w http.ResponseWriter, r *http.Request, src LogSource, sel LogSel
 			case err == nil:
 				write("end", map[string]any{"lines": sent})
 			case errors.Is(err, ErrNoPods):
-				write("end", map[string]any{"lines": sent, "reason": "nothing is running for this app"})
+				write("end", map[string]any{"lines": sent, "reason": "bu uygulama için çalışan bir şey yok"})
 			case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 				// The reader left. Nothing to report to them about it.
 			default:
@@ -294,7 +294,7 @@ func streamSSE(w http.ResponseWriter, r *http.Request, src LogSource, sel LogSel
 				// The message is this platform's own and never the cluster's:
 				// an API server refusal quotes the ServiceAccount and the
 				// resource, and that belongs in the log this line just wrote.
-				write("error", map[string]any{"detail": "the log stream stopped"})
+				write("error", map[string]any{"detail": "log akışı durdu"})
 			}
 			return
 		case <-ctx.Done():
@@ -370,10 +370,10 @@ func logSelectorFrom(r *http.Request) (LogSelector, error) {
 		// silently received 200 shows a gap where the missing lines were, and
 		// nothing on screen says the request was ignored.
 		if err != nil || n < 0 {
-			return LogSelector{}, fmt.Errorf("tail must be a number of lines, not %q", raw)
+			return LogSelector{}, fmt.Errorf("tail bir satır sayısı olmalı, %q değil", raw)
 		}
 		if n > maxTail {
-			return LogSelector{}, fmt.Errorf("tail must be at most %d lines", maxTail)
+			return LogSelector{}, fmt.Errorf("tail en fazla %d satır olabilir", maxTail)
 		}
 		sel.Tail = n
 	}
@@ -383,7 +383,7 @@ func logSelectorFrom(r *http.Request) (LogSelector, error) {
 	if raw := r.URL.Query().Get("follow"); raw != "" {
 		follow, err := strconv.ParseBool(raw)
 		if err != nil {
-			return LogSelector{}, fmt.Errorf("follow must be true or false, not %q", raw)
+			return LogSelector{}, fmt.Errorf("follow true ya da false olmalı, %q değil", raw)
 		}
 		sel.Follow = follow
 	}

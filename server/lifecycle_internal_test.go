@@ -594,7 +594,7 @@ func TestScaleRefusesAnAutoscaledWorkload(t *testing.T) {
 	if code != http.StatusConflict {
 		t.Fatalf("scaling an autoscaled workload = %d, want 409: %s", code, body)
 	}
-	if !strings.Contains(body, "autoscale") {
+	if !strings.Contains(body, "otomatik ölçekleniyor") {
 		t.Errorf("the refusal does not say why: %s", body)
 	}
 	// Nothing was committed: the manifest still autoscales.
@@ -622,7 +622,7 @@ func TestScaleRefusesAWorkloadWithAVolume(t *testing.T) {
 	if code != http.StatusConflict {
 		t.Fatalf("scaling a workload with a volume = %d, want 409: %s", code, body)
 	}
-	if !strings.Contains(body, "one replica") {
+	if !strings.Contains(body, "bir replika çalıştırıyor") {
 		t.Errorf("the refusal does not say why: %s", body)
 	}
 	if got := committedWorkload(t, l.repo); got.Spec.Replicas != nil {
@@ -660,7 +660,7 @@ func TestScaleBeforeAnythingIsDeployed(t *testing.T) {
 	if code != http.StatusConflict {
 		t.Fatalf("scaling before the first deploy = %d, want 409: %s", code, body)
 	}
-	if !strings.Contains(body, "nothing is deployed") {
+	if !strings.Contains(body, "hiçbir şey deploy edilmedi") {
 		t.Errorf("the refusal does not say what is missing: %s", body)
 	}
 }
@@ -696,7 +696,7 @@ func TestRestartSaysItCannotAndSaysWhy(t *testing.T) {
 	if code != http.StatusNotImplemented {
 		t.Fatalf("restart = %d, want 501: %s", code, body)
 	}
-	if !strings.Contains(body, "pod template") {
+	if !strings.Contains(body, "pod şablonu") {
 		t.Errorf("the refusal does not say what is missing: %s", body)
 	}
 	// And it did nothing on the way: a refusal that commits is worse than one

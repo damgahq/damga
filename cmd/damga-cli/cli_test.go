@@ -258,7 +258,7 @@ func TestLoginThenTheOrdinaryCommands(t *testing.T) {
 		"--path", "apps/api/prod", "--namespace", "acme-prod")
 
 	listed := c.mustRun("", "apps")
-	for _, want := range []string{testApp, testEnv, "never deployed", "acme-prod"} {
+	for _, want := range []string{testApp, testEnv, "hiç deploy edilmedi", "acme-prod"} {
 		if !strings.Contains(listed, want) {
 			t.Errorf("apps did not mention %q:\n%s", want, listed)
 		}
@@ -334,7 +334,7 @@ func TestAWrongPasswordIsRefusedInTheServersOwnWords(t *testing.T) {
 	if err == nil {
 		t.Fatal("a wrong password was accepted")
 	}
-	if !strings.Contains(err.Error(), "do not match an account") {
+	if !strings.Contains(err.Error(), "bir hesapla eşleşmiyor") {
 		t.Errorf("the refusal was reworded: %v", err)
 	}
 	if got := exitFor(err); got != exitNotSignedIn {

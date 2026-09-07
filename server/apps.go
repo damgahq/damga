@@ -117,7 +117,7 @@ func createApp(g guard, st stores) http.Handler {
 
 		var req createAppRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody)).Decode(&req); err != nil {
-			problem(w, http.StatusBadRequest, "the request body is not the expected JSON")
+			problem(w, http.StatusBadRequest, "istek gövdesi beklenen JSON değil")
 			return
 		}
 
@@ -138,16 +138,16 @@ func createApp(g guard, st stores) http.Handler {
 		// which point the failure is a rollout that never appears rather than a
 		// sentence the person who typed it can read.
 		for _, f := range []struct{ what, value string }{
-			{"app name", req.App},
-			{"environment", req.Env},
+			{"uygulama adı", req.App},
+			{"ortam", req.Env},
 			{fieldNamespace, req.Namespace},
 		} {
 			if f.value == "" {
-				problem(w, http.StatusBadRequest, "an app needs an app name, an environment and a namespace")
+				problem(w, http.StatusBadRequest, "bir uygulama için uygulama adı, ortam ve namespace gerekir")
 				return
 			}
 			if msgs := validation.IsDNS1123Label(f.value); len(msgs) > 0 {
-				problem(w, http.StatusBadRequest, "the "+f.what+" is not usable in Kubernetes: "+msgs[0])
+				problem(w, http.StatusBadRequest, f.what+" Kubernetes'te kullanılamaz: "+msgs[0])
 				return
 			}
 		}
@@ -157,7 +157,7 @@ func createApp(g guard, st stores) http.Handler {
 		// private network needs none — so a rule here would either duplicate
 		// that answer or contradict it.
 		if req.RepoURL == "" {
-			problem(w, http.StatusBadRequest, "an app needs a repository to write its manifests to")
+			problem(w, http.StatusBadRequest, "bir uygulama için manifest'lerinin yazılacağı bir depo gerekir")
 			return
 		}
 
@@ -170,10 +170,10 @@ func createApp(g guard, st stores) http.Handler {
 		// another repository. The cross-tenant case is not defended here at
 		// all; that is the store's claim, below.
 		if _, err := st.placement.Get(r.Context(), ref.TenantID, req.App, req.Env); err == nil {
-			problem(w, http.StatusConflict, "this app and environment already exist")
+			problem(w, http.StatusConflict, "bu uygulama ve ortam zaten var")
 			return
 		} else if !errors.Is(err, placement.ErrNotFound) {
-			problem(w, http.StatusInternalServerError, "reading the placement failed")
+			problem(w, http.StatusInternalServerError, "yerleşim kaydı okunamadı")
 			return
 		}
 
@@ -206,7 +206,7 @@ func createApp(g guard, st stores) http.Handler {
 			problem(w, http.StatusConflict, err.Error())
 			return
 		case err != nil:
-			problem(w, http.StatusInternalServerError, "writing the placement failed")
+			problem(w, http.StatusInternalServerError, "yerleşim kaydı yazılamadı")
 			return
 		}
 
@@ -214,13 +214,13 @@ func createApp(g guard, st stores) http.Handler {
 		// first deploy, so the commit a deploy makes has something already
 		// watching for it. Argo CD polls, so one that appears afterwards still
 		// finds the commit — it just waits for a poll rather than a sync.
-		delivered := "an Argo CD Application is watching this app's directory"
+		delivered := "bir Argo CD Application bu uygulamanın dizinini izliyor"
 		note, err := deliverPlacement(r.Context(), st, got)
 		switch {
 		case err != nil:
-			delivered = "nothing is applying this app's commits yet: " + err.Error()
+			delivered = "bu uygulamanın commit'lerini henüz hiçbir şey uygulamıyor: " + err.Error()
 		case note != "":
-			delivered += ", but " + note
+			delivered += ", ancak " + note
 		}
 
 		w.WriteHeader(http.StatusCreated)
@@ -267,7 +267,7 @@ func deleteApp(g guard, st stores) http.Handler {
 
 		all, err := st.placement.List(r.Context(), ref.TenantID)
 		if err != nil {
-			problem(w, http.StatusInternalServerError, "reading the placements failed")
+			problem(w, http.StatusInternalServerError, "yerleşim kayıtları okunamadı")
 			return
 		}
 		// Every environment of this app, because the path names an app and not
@@ -284,7 +284,7 @@ func deleteApp(g guard, st stores) http.Handler {
 			})
 		}
 		if len(out) == 0 {
-			problem(w, http.StatusNotFound, "this tenant has no app by that name")
+			problem(w, http.StatusNotFound, "bu kiracının bu adda bir uygulaması yok")
 			return
 		}
 
@@ -297,7 +297,7 @@ func deleteApp(g guard, st stores) http.Handler {
 				// happened — and why repeating the call is safe, since deleting
 				// what is not there is not an error.
 				problem(w, http.StatusInternalServerError,
-					"the app was only partly removed: "+p.Env+" and everything after it are still registered")
+					"uygulama yalnızca kısmen kaldırıldı: "+p.Env+" ve ondan sonrakiler hâlâ kayıtlı")
 				return
 			}
 		}

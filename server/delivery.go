@@ -81,9 +81,9 @@ type Deliverer interface {
 // would tell the caller to undo work that is fine.
 func deliverPlacement(ctx context.Context, st stores, place placement.Placement) (string, error) {
 	if st.delivery == nil {
-		return "", fmt.Errorf("this installation has no delivery: it was started without a " +
-			"cluster to write Argo CD Applications into, so commits accumulate and nothing " +
-			"applies them")
+		return "", fmt.Errorf("bu kurulumun teslimatı yok: Argo CD Application'larının yazılacağı " +
+			"bir küme olmadan başlatıldı, bu yüzden commit'ler birikiyor ve hiçbir şey onları " +
+			"uygulamıyor")
 	}
 	return st.delivery.Deliver(ctx, place)
 }
@@ -201,7 +201,7 @@ func (d clusterDelivery) Deliver(ctx context.Context, place placement.Placement)
 // real, so this is not an error; it is a sentence in the answer.
 func (d clusterDelivery) credential(ctx context.Context, place placement.Placement) (string, error) {
 	if d.auth == nil {
-		return noCredentialNote("this server was started without git credentials"), nil
+		return noCredentialNote("bu sunucu git kimlik bilgileri olmadan başlatıldı"), nil
 	}
 	method, err := d.auth.For(place.RepoURL)
 	if err != nil {
@@ -215,8 +215,8 @@ func (d clusterDelivery) credential(ctx context.Context, place placement.Placeme
 		// an empty password, which fails as a bad credential rather than as a
 		// missing one.
 		return noCredentialNote(fmt.Sprintf(
-			"the configured git credential is a %T, which an Argo CD repository "+
-				"Secret cannot carry", method)), nil
+			"tanımlı git kimlik bilgisi bir %T, ve bunu bir Argo CD depo Secret'ı "+
+				"taşıyamaz", method)), nil
 	}
 
 	sec := &unstructured.Unstructured{}
@@ -256,8 +256,8 @@ func (d clusterDelivery) credential(ctx context.Context, place placement.Placeme
 // noCredentialNote is the one sentence the answer carries when Argo CD was
 // given nothing to authenticate with.
 func noCredentialNote(why string) string {
-	return "Argo CD was given no credential for this repository, so it can read it " +
-		"only if the repository is public (" + why + ")"
+	return "Argo CD'ye bu depo için hiçbir kimlik bilgisi verilmedi, yani depoyu ancak " +
+		"herkese açıksa okuyabilir (" + why + ")"
 }
 
 // repoSecretName names the credential after the repository rather than after

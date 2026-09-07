@@ -48,9 +48,9 @@ const MAX_OUTPUT = 200000;
 function execView(state) {
   switch (state.phase) {
     case "idle":
-      return { state: "idle", text: "nothing has been run yet", ok: null, ran: false };
+      return { state: "idle", text: "henüz hiçbir şey çalıştırılmadı", ok: null, ran: false };
     case "running":
-      return { state: "running", text: "running…", ok: null, ran: true };
+      return { state: "running", text: "çalışıyor…", ok: null, ran: true };
     case "exited": {
       const code = state.code;
       return {
@@ -58,7 +58,7 @@ function execView(state) {
         // The server's number, said plainly. A non-zero exit is the command's
         // answer and not a platform failure, so it does not get the word
         // "failed" — it gets its code.
-        text: code === 0 ? "the command exited 0" : `the command exited ${code}`,
+        text: code === 0 ? "komut 0 ile çıktı" : `komut ${code} ile çıktı`,
         ok: code === 0,
         ran: true,
         code,
@@ -73,7 +73,7 @@ function execView(state) {
         // them. Rewriting them here would put the reason behind a second
         // vocabulary that has to be kept in step with the first.
         state: "refused",
-        text: state.detail || "the command could not be run",
+        text: state.detail || "komut çalıştırılamadı",
         ok: false,
         ran: false,
       };
@@ -82,8 +82,8 @@ function execView(state) {
         state: "lost",
         text:
           state.detail ||
-          "the connection broke while the command was running. It may have finished; " +
-          "its output stops here.",
+          "komut çalışırken bağlantı koptu. Bitmiş olabilir; çıktısı burada " +
+          "kesiliyor.",
         ok: false,
         // The point of this whole state. Something ran, and what it did is not
         // on this screen.
@@ -105,11 +105,11 @@ function refusalText(status, body) {
   if (detail) return detail;
   switch (status) {
     case 403:
-      return "running a command is owner-only, and this account is not an owner";
+      return "komut çalıştırmak yalnızca sahibe açıktır, ve bu hesap sahip değil";
     case 501:
-      return "this installation cannot run commands in the cluster";
+      return "bu kurulum kümede komut çalıştıramıyor";
     default:
-      return `the command was refused with ${status} and no detail`;
+      return `komut ${status} ile ve hiçbir ayrıntı vermeden reddedildi`;
   }
 }
 
@@ -148,7 +148,7 @@ function parseCommand(text) {
     }
     current += ch;
   }
-  if (quote) throw new Error(`the command has an unclosed ${quote} quote`);
+  if (quote) throw new Error(`komutta kapatılmamış bir ${quote} tırnağı var`);
   if (has || current) argv.push(current);
   return argv;
 }
@@ -233,12 +233,12 @@ function mountExec(el, base, options = {}) {
   container.type = "text";
   container.name = "container";
   container.id = "exec-container";
-  container.placeholder = "container (only if the pod has several)";
+  container.placeholder = "konteyner (yalnızca pod'da birden fazla varsa)";
   container.setAttribute("autocomplete", "off");
 
   const run = doc.createElement("button");
   run.type = "submit";
-  run.textContent = "Run";
+  run.textContent = "Çalıştır";
 
   const status = doc.createElement("p");
   status.className = "muted";
@@ -282,7 +282,7 @@ function mountExec(el, base, options = {}) {
       return;
     }
     if (!argv.length) {
-      paint({ phase: "refused", detail: "type a command first" });
+      paint({ phase: "refused", detail: "önce bir komut yazın" });
       return;
     }
 

@@ -127,26 +127,26 @@ function installOutcome(status, body) {
     const where = (body && body.app) || {};
     return {
       ok: true,
-      text: deploy.seq ? `committed as deploy ${deploy.seq}` : 'committed',
+      text: deploy.seq ? `${deploy.seq} numaralı deploy olarak commit edildi` : 'commit edildi',
       // Said in the same breath as the success, not under it.
-      note: `${deploy.state ? `The deploy is ${deploy.state}. ` : ''}` +
-        'Nothing is running until the cluster applies the commit; watch it under ' +
-        `${where.app || 'the application'} · ${where.env || ''}`.trim(),
+      note: `${deploy.state ? `Deploy'un durumu: ${deploy.state}. ` : ''}` +
+        'Küme commit\'i uygulayana kadar çalışan bir şey olmaz; şuradan izleyin: ' +
+        `${where.app || 'uygulama'} · ${where.env || ''}`.trim(),
       reasons: [],
     };
   }
   if (status === 422) {
     // The endpoint refused and listed every reason rather than the first.
-    return { ok: false, text: 'this cannot be installed', note: '', reasons: refusals(body) };
+    return { ok: false, text: 'bu kurulamaz', note: '', reasons: refusals(body) };
   }
   if (status === 409) {
     // An app that exists, or a repository or namespace another tenant holds.
     // The store's own words name the field and quote only what was sent.
-    return { ok: false, text: 'that is already taken', note: detail, reasons: [] };
+    return { ok: false, text: 'bu zaten alınmış', note: detail, reasons: [] };
   }
   return {
     ok: false,
-    text: detail || `the install failed (HTTP ${status})`,
+    text: detail || `kurulum başarısız oldu (HTTP ${status})`,
     note: '',
     reasons: refusals(body),
   };
@@ -175,7 +175,7 @@ async function catalogApi(path, options = {}) {
 // nothing. "the plan could not be made" would be true of all of them.
 function planError(status, body) {
   const detail = body && typeof body.detail === 'string' ? body.detail : '';
-  return detail || `the plan request failed with ${status} and no detail`;
+  return detail || `plan isteği ${status} ile ve hiçbir ayrıntı vermeden başarısız oldu`;
 }
 
 function catalogEl(tag, attrs = {}, ...children) {
@@ -203,10 +203,10 @@ function mountCatalog(root, base, options = {}) {
   // that can differ from the one on screen.
   const targets = installTargets(options.apps);
 
-  const search = catalogEl('input', { id: 'catalog-search', placeholder: 'search applications' });
+  const search = catalogEl('input', { id: 'catalog-search', placeholder: 'uygulama ara' });
   const list = catalogEl('div', { id: 'catalog-list' });
   const detail = catalogEl('div', { id: 'catalog-detail' });
-  root.append(catalogEl('h2', { text: 'Catalogue' }), search, list, detail);
+  root.append(catalogEl('h2', { text: 'Katalog' }), search, list, detail);
 
   const load = async () => {
     const { status, body } = await catalogApi(`${base}/catalog${catalogQuery({ text: search.value })}`);
@@ -215,7 +215,7 @@ function mountCatalog(root, base, options = {}) {
       // The 503 case says which flag is unset, and it is shown as it arrived:
       // "no applications" and "nobody mounted the catalogue" are different
       // sentences and only the endpoint knows which one is true.
-      list.append(catalogEl('p', { class: 'empty', text: (body && body.detail) || 'the catalogue is unavailable' }));
+      list.append(catalogEl('p', { class: 'empty', text: (body && body.detail) || 'katalog kullanılamıyor' }));
       return;
     }
     catalogState.entries = body.entries || [];
@@ -229,14 +229,14 @@ function mountCatalog(root, base, options = {}) {
       list.append(button);
     }
     if (catalogState.entries.length === 0) {
-      list.append(catalogEl('p', { class: 'empty', text: 'nothing matches that search' }));
+      list.append(catalogEl('p', { class: 'empty', text: 'bu aramayla eşleşen bir şey yok' }));
     }
   };
 
   const select = async (entry) => {
     catalogState.selected = entry;
     catalogState.plan = null;
-    detail.replaceChildren(catalogEl('p', { text: `planning ${entry.name}…` }));
+    detail.replaceChildren(catalogEl('p', { text: `${entry.name} planlanıyor…` }));
 
     // The dry run is the panel asking the endpoint that would refuse. Nothing
     // below is computed from the entry.
@@ -310,7 +310,7 @@ function mountCatalog(root, base, options = {}) {
   const render = (entry, plan) => {
     const nodes = [catalogEl('h3', { text: entry.name })];
     if (entry.documentation) {
-      nodes.push(catalogEl('a', { href: entry.documentation, text: 'documentation' }));
+      nodes.push(catalogEl('a', { href: entry.documentation, text: 'belgeler' }));
     }
     for (const reason of refusals(plan)) {
       nodes.push(catalogEl('p', { class: 'refusal', text: reason }));
@@ -333,10 +333,10 @@ function mountCatalog(root, base, options = {}) {
     // not be pressed while the endpoint is refusing.
     const guess = formValues(entry);
     const form = catalogEl('div', { class: 'install-form' },
-      field('app', 'Name', guess.app),
-      field('env', 'Environment', guess.env),
-      field('repoUrl', 'Repository for its manifests', guess.repoUrl, targets.repos),
-      field('branch', 'Branch', guess.branch, targets.branches),
+      field('app', 'Ad', guess.app),
+      field('env', 'Ortam', guess.env),
+      field('repoUrl', 'Manifest\'leri için depo', guess.repoUrl, targets.repos),
+      field('branch', 'Dal', guess.branch, targets.branches),
       field('namespace', 'Namespace', guess.namespace, targets.namespaces),
     );
     nodes.push(form);
@@ -349,13 +349,13 @@ function mountCatalog(root, base, options = {}) {
       // deployed has a namespace to offer; the first install does not, and the
       // person doing it is the one who knows which one exists.
       nodes.push(catalogEl('p', { class: 'install-note', text:
-        'Nothing here creates a namespace. This has to be one that already exists in the ' +
-        'cluster, with the tenant quota and the Pod Security labels on it.' }));
+        'Buradaki hiçbir şey namespace oluşturmaz. Bu, kümede zaten var olan, üzerinde ' +
+        'kiracı kotası ve Pod Security etiketleri bulunan bir namespace olmalı.' }));
     }
     if (targets.repos.length === 0) {
       nodes.push(catalogEl('p', { class: 'install-note', text:
-        'The manifests are committed to a repository damga can push to. This tenant has none ' +
-        'recorded yet, so the address has to be typed in.' }));
+        'Manifest\'ler, damga\'nın push edebildiği bir depoya commit edilir. Bu kiracının ' +
+        'kayıtlı deposu henüz yok, bu yüzden adresin yazılması gerekiyor.' }));
     }
 
     // Changing a field re-plans. Without this the form clears the refusal in
@@ -367,13 +367,13 @@ function mountCatalog(root, base, options = {}) {
 
     if (!canInstall(plan)) {
       nodes.push(catalogEl('p', { class: 'install-note', text:
-        'The plan is re-checked when a field changes.' }));
+        'Bir alan değiştiğinde plan yeniden kontrol edilir.' }));
       detail.replaceChildren(...nodes);
       return;
     }
 
     const status = catalogEl('p', { class: 'install-status' });
-    const button = catalogEl('button', { class: 'install', type: 'button', text: `install ${entry.name}` });
+    const button = catalogEl('button', { class: 'install', type: 'button', text: `${entry.name} kur` });
 
     button.addEventListener('click', async () => {
       const values = formValues(entry);
@@ -382,12 +382,12 @@ function mountCatalog(root, base, options = {}) {
         // Refused here rather than sent, because the endpoint's answer to an
         // empty repository is a 400 about a field the reader cannot see.
         status.className = 'install-status bad';
-        status.textContent = `still needed: ${missing.join(', ')}`;
+        status.textContent = `hâlâ gerekli: ${missing.join(', ')}`;
         return;
       }
       button.disabled = true;
       status.className = 'install-status';
-      status.textContent = `installing ${entry.name}…`;
+      status.textContent = `${entry.name} kuruluyor…`;
 
       const { status: code, body } = await catalogApi(
         `${base}/apps/${encodeURIComponent(values.app)}/envs/${encodeURIComponent(values.env)}/from-catalog`, {

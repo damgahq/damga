@@ -101,7 +101,7 @@ func TestAnInstallWithNothingToApplyItSaysSo(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("installing = %d: %s", code, body)
 	}
-	if !strings.Contains(body, "nothing is applying") {
+	if !strings.Contains(body, "hiçbir şey onları uygulamıyor") {
 		t.Fatalf("the response does not say that nothing will apply what was just committed. "+
 			"That silence is the failure this whole change exists for: %s", body)
 	}

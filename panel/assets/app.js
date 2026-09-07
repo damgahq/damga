@@ -57,7 +57,7 @@ const backupView = (b) => {
   if (b.state === "none yet") {
     return {
       database: b.database || "—",
-      lastRun: { text: "no backup has run yet", ok: null },
+      lastRun: { text: "henüz hiçbir yedek çalışmadı", ok: null },
       verified: null,
     };
   }
@@ -65,16 +65,16 @@ const backupView = (b) => {
   return {
     database: b.database || "—",
     lastRun: {
-      text: `${restored ? "restored" : "backed up"} ${when(b.finishedAt)}`,
+      text: `${restored ? "geri yüklendi" : "yedeklendi"} ${when(b.finishedAt)}`,
       ok: restored,
     },
     verified: restored
       ? {
-          text: `${b.rows} of ${b.sourceRows} rows across ` +
-            `${b.tables} ${b.tables === 1 ? "table" : "tables"}`,
+          text: `${b.sourceRows} satırın ${b.rows} tanesi, ` +
+            `${b.tables} tablo üzerinden`,
           ok: true,
         }
-      : { text: "the archive was written and not restored", ok: null },
+      : { text: "arşiv yazıldı, geri yüklenmedi", ok: null },
   };
 };
 
@@ -91,7 +91,7 @@ async function api(path, options = {}) {
     ...options,
   });
   if (res.status === 401) {
-    throw new NotSignedIn("not signed in");
+    throw new NotSignedIn("giriş yapılmadı");
   }
   const body = res.headers.get("content-type")?.includes("json")
     ? await res.json()
@@ -176,7 +176,7 @@ async function start() {
   if (!me.memberships.length) {
     $("apps").replaceChildren();
     render(el("p", { class: "muted empty" },
-      "This account is not a member of any tenant yet."));
+      "Bu hesap henüz hiçbir kiracının üyesi değil."));
     return;
   }
   select.value = me.memberships[0].tenantId;
@@ -206,7 +206,7 @@ async function pickTenant(tenantId) {
   // branch below used to return before anything else was offered — which left
   // the one page that can create an app reachable only from a tenant that
   // already had one.
-  const catalogue = el("button", { type: "button", class: "catalogue" }, "Install an application");
+  const catalogue = el("button", { type: "button", class: "catalogue" }, "Uygulama kur");
   catalogue.addEventListener("click", () => showCatalog());
   nav.append(catalogue);
 
@@ -218,14 +218,14 @@ async function pickTenant(tenantId) {
   // app on every install had to be created with curl, and the endpoint's own
   // refusals (the one that names -git-token-file among them) were sentences
   // nobody could reach from here.
-  const newApp = el("button", { type: "button", class: "catalogue" }, "Add an application");
+  const newApp = el("button", { type: "button", class: "catalogue" }, "Uygulama ekle");
   newApp.addEventListener("click", () => showNewApp());
   nav.append(newApp);
 
   if (!apps.length) {
-    nav.append(el("p", { class: "muted" }, "Nothing has been deployed here yet."));
+    nav.append(el("p", { class: "muted" }, "Buraya henüz hiçbir şey deploy edilmedi."));
     render(el("p", { class: "muted empty" },
-      "Once something is deployed, it appears here with the evidence for it."));
+      "Bir şey deploy edildiğinde, kanıtıyla birlikte burada görünür."));
     return;
   }
   for (const app of apps) {
@@ -288,7 +288,7 @@ function mountSettings(el, prefix) {
         ...options,
         headers: { "Accept": "application/json", ...(options.headers || {}) },
       });
-      if (res.status === 401) throw new NotSignedIn("not signed in");
+      if (res.status === 401) throw new NotSignedIn("giriş yapılmadı");
       return res;
     },
   }));
@@ -304,7 +304,7 @@ function mountDatabases(el, prefix) {
         ...options,
         headers: { "Accept": "application/json", ...(options.headers || {}) },
       });
-      if (res.status === 401) throw new NotSignedIn("not signed in");
+      if (res.status === 401) throw new NotSignedIn("giriş yapılmadı");
       return res;
     },
   }));
@@ -318,11 +318,11 @@ function mountDatabases(el, prefix) {
 // span and not a button: a control that does nothing is a control somebody
 // presses twice wondering what they missed.
 function appTabs(active) {
-  const strip = el("nav", { class: "tabs", "aria-label": "Application views" });
+  const strip = el("nav", { class: "tabs", "aria-label": "Uygulama görünümleri" });
   for (const tab of [
-    { id: "overview", label: "Overview", go: showEvidence },
-    { id: "settings", label: "Settings", go: showSettings },
-    { id: "databases", label: "Databases", go: showDatabases },
+    { id: "overview", label: "Genel bakış", go: showEvidence },
+    { id: "settings", label: "Ayarlar", go: showSettings },
+    { id: "databases", label: "Veritabanları", go: showDatabases },
   ]) {
     if (tab.id === active) {
       const here = el("span", { class: "tab", "aria-current": "true" }, tab.label);
@@ -350,8 +350,8 @@ function showSettings() {
     appTabs("settings"),
     el("h2", {}, `${app} · ${env}`),
     el("p", { class: "sub muted" },
-      "Environment variables. Plain values are committed to git; secret values are " +
-      "written to the cluster and are not."),
+      "Ortam değişkenleri. Düz değerler git'e commit edilir; sır değerleri kümeye " +
+      "yazılır ve commit edilmez."),
     box,
   );
   mounted.push(mountSettings(box, prefix));
@@ -371,8 +371,8 @@ function showDatabases() {
     appTabs("databases"),
     el("h2", {}, `${app} · ${env}`),
     el("p", { class: "sub muted" },
-      "Postgres and Redis, committed to git like everything else. Credentials are " +
-      "generated into a Secret your application reads and are never in git."),
+      "Postgres ve Redis, her şey gibi git'e commit edilir. Kimlik bilgileri, " +
+      "uygulamanızın okuduğu bir Secret'a üretilir ve asla git'te bulunmaz."),
     box,
   );
   mounted.push(mountDatabases(box, prefix));
@@ -394,7 +394,7 @@ function mountExec(el, prefix) {
         ...options,
         headers: { "Accept": "text/event-stream", ...(options.headers || {}) },
       });
-      if (res.status === 401) throw new NotSignedIn("not signed in");
+      if (res.status === 401) throw new NotSignedIn("giriş yapılmadı");
       return res;
     },
   }));
@@ -446,7 +446,7 @@ function showCatalog() {
     // renders: a view that silently is not there looks like a catalogue with
     // nothing in it.
     render(el("p", { class: "muted empty" },
-      "The catalogue view did not load; /catalog.js is not being served."));
+      "Katalog görünümü yüklenmedi; /catalog.js sunulmuyor."));
     return;
   }
   load().catch(fail);
@@ -494,22 +494,22 @@ function newAppOutcome(status, body) {
     const app = (body && body.app) || {};
     return {
       ok: true,
-      text: `${app.app || "the application"} · ${app.env || ""}`.trim() + " is registered",
+      text: `${app.app || "uygulama"} · ${app.env || ""}`.trim() + " kaydedildi",
       // Said in the same breath as the success. Registering an app writes a
       // placement and an Argo CD Application; it deploys nothing, and somebody
       // who read "registered" as "running" would go looking for a pod that was
       // never asked for.
       note: (body && body.delivery) || "",
-      hint: "Nothing is deployed by this. It records where this app's manifests are "
-        + "committed and which namespace they run in.",
+      hint: "Bu hiçbir şey deploy etmez. Bu uygulamanın manifest'lerinin nereye commit "
+        + "edildiğini ve hangi namespace'te çalıştıklarını kaydeder.",
     };
   }
   if (status === 409) {
     // An app that exists, or a repository or namespace another tenant holds.
     // The store's words name the field and quote only what was sent.
-    return { ok: false, text: "that is already taken", note: detail, hint: "" };
+    return { ok: false, text: "bu zaten alınmış", note: detail, hint: "" };
   }
-  return { ok: false, text: detail || `the app could not be created (HTTP ${status})`, note: "", hint: "" };
+  return { ok: false, text: detail || `uygulama oluşturulamadı (HTTP ${status})`, note: "", hint: "" };
 }
 
 // The form itself.
@@ -546,14 +546,14 @@ function showNewApp() {
   };
 
   const status = el("p", { class: "install-status" });
-  const button = el("button", { class: "install", type: "button" }, "Add the application");
+  const button = el("button", { class: "install", type: "button" }, "Uygulamayı ekle");
 
   const form = el("div", { class: "install-form" },
-    field("app", "Name", ""),
-    field("env", "Environment", "prod"),
-    field("repoUrl", "Repository for its manifests", known((a) => a.repoUrl)[0] || "", known((a) => a.repoUrl)),
-    field("branch", "Branch", known((a) => a.branch)[0] || "main", known((a) => a.branch)),
-    field("path", "Directory in that repository", ""),
+    field("app", "Ad", ""),
+    field("env", "Ortam", "prod"),
+    field("repoUrl", "Manifest'leri için depo", known((a) => a.repoUrl)[0] || "", known((a) => a.repoUrl)),
+    field("branch", "Dal", known((a) => a.branch)[0] || "main", known((a) => a.branch)),
+    field("path", "O depodaki dizin", ""),
     field("namespace", "Namespace", "", known((a) => a.namespace)),
   );
 
@@ -567,12 +567,12 @@ function showNewApp() {
       // Refused here rather than sent, because the endpoint answers an empty
       // repository with a 400 naming a field this form calls something else.
       status.className = "install-status bad";
-      status.textContent = `still needed: ${missing.join(", ")}`;
+      status.textContent = `hâlâ gerekli: ${missing.join(", ")}`;
       return;
     }
     button.disabled = true;
     status.className = "install-status";
-    status.textContent = "creating…";
+    status.textContent = "oluşturuluyor…";
     let outcome;
     try {
       const created = await api(`${tenantBase()}/apps`, {
@@ -612,18 +612,18 @@ function showNewApp() {
   // are written against it. A bare h2 in #detail is the heading of an evidence
   // box and is sized like one.
   render(el("div", { class: "catalogue-view" },
-    el("h2", {}, "Add an application"),
+    el("h2", {}, "Uygulama ekle"),
     el("p", { class: "muted" },
-      "For something you build yourself. The catalogue is for what this platform ships a "
-      + "template for."),
+      "Kendi yazdığınız bir şey için. Katalog, bu platformun şablon getirdiği şeyler "
+      + "içindir."),
     form,
     el("p", { class: "install-note" },
-      "The repository is where damga commits this app's manifests — not where its source "
-      + "lives. It has to exist already and damga has to be able to push to it; nothing "
-      + "here creates one."),
+      "Depo, damga'nın bu uygulamanın manifest'lerini commit ettiği yerdir — kaynağının "
+      + "yaşadığı yer değil. Zaten var olmalı ve damga oraya push edebilmeli; buradaki "
+      + "hiçbir şey depo oluşturmaz."),
     el("p", { class: "install-note" },
-      "The namespace has to exist too, with the tenant quota and the Pod Security labels "
-      + "on it."),
+      "Namespace'in de var olması gerekiyor, üzerinde kiracı kotası ve Pod Security "
+      + "etiketleriyle birlikte."),
     button,
     status,
   ));
@@ -645,7 +645,7 @@ function base() {
 
 async function showEvidence() {
   const prefix = base();
-  render(el("p", { class: "muted empty" }, "Loading…"));
+  render(el("p", { class: "muted empty" }, "Yükleniyor…"));
 
   // Fetched together rather than in sequence. They are independent reads and
   // the page is not useful until all of them are in.
@@ -676,39 +676,39 @@ async function showEvidence() {
     el("p", { class: "sub muted" }, current
       ? `Deploy ${current.seq}, ${current.state}, ${when(current.updatedAt)}`
       : blocked
-        ? `Nothing is running. Deploy ${latest.seq} was refused, ${when(latest.createdAt)}.`
+        ? `Çalışan bir şey yok. ${latest.seq} numaralı deploy reddedildi, ${when(latest.createdAt)}.`
         : latest
-          ? `Nothing is running. Deploy ${latest.seq} is ${latest.state}, ${when(latest.createdAt)}.`
-          : "Nothing has been deployed here yet."),
+          ? `Çalışan bir şey yok. ${latest.seq} numaralı deploy ${latest.state}, ${when(latest.createdAt)}.`
+          : "Buraya henüz hiçbir şey deploy edilmedi."),
   ];
 
   if (blocked) {
     parts.push(el("div", { class: "box banner" },
-      el("h3", {}, "Refused"),
-      el("p", {}, latest.admission.reason || "Admission refused this deploy.")));
+      el("h3", {}, "Reddedildi"),
+      el("p", {}, latest.admission.reason || "Admission bu deploy'u reddetti.")));
   }
 
   if (shown) {
     parts.push(el("div", { class: "grid" },
-      box("Image", dl([
-        ["Running", el("span", { class: "mono" }, shown.image.requestedRef || "—")],
+      box("İmaj", dl([
+        ["Çalışan", el("span", { class: "mono" }, shown.image.requestedRef || "—")],
       ])),
-      box("Source", dl([
-        ["Repository", shown.source.repoUrl || "—"],
+      box("Kaynak", dl([
+        ["Depo", shown.source.repoUrl || "—"],
         ["Commit", el("span", { class: "mono" }, shown.source.commitSha || "—")],
-        ["Path", el("span", { class: "mono" }, shown.source.path || "—")],
-        ["Deployed by", shown.actor.displayName || shown.actor.email || "—"],
+        ["Yol", el("span", { class: "mono" }, shown.source.path || "—")],
+        ["Deploy eden", shown.actor.displayName || shown.actor.email || "—"],
       ])),
       box("Admission", dl([
         // Three answers and not two. Nothing records an admission outcome yet,
         // so a page with only "admitted" and "refused" has to call every deploy
         // in existence refused — which is a claim, made out of a zero value,
         // about the one thing this page exists to be trusted on.
-        ["Outcome", admissionKnown(shown)
+        ["Sonuç", admissionKnown(shown)
           ? verdict(shown.admission.allowed,
-              shown.admission.allowed ? "admitted" : "refused")
-          : el("span", { class: "muted" }, "not observed")],
-        ["Reason", shown.admission.reason || "—"],
+              shown.admission.allowed ? "kabul edildi" : "reddedildi")
+          : el("span", { class: "muted" }, "gözlemlenmedi")],
+        ["Gerekçe", shown.admission.reason || "—"],
       ])),
     ));
   }
@@ -717,42 +717,42 @@ async function showEvidence() {
     const view = backupView(backup.backup);
     const cell = (v) =>
       v.ok === null ? el("span", { class: "muted" }, v.text) : verdict(v.ok, v.text);
-    const rows = [["Database", view.database], ["Last run", cell(view.lastRun)]];
+    const rows = [["Veritabanı", view.database], ["Son çalışma", cell(view.lastRun)]];
     if (view.verified) {
-      rows.push(["Verified", cell(view.verified)]);
+      rows.push(["Doğrulandı", cell(view.verified)]);
     }
     parts.push(el("div", { class: "box", style: "margin-top:1rem" },
-      el("h3", {}, "Backup"), dl(rows)));
+      el("h3", {}, "Yedek"), dl(rows)));
   }
 
   parts.push(el("div", { class: "box", style: "margin-top:1rem" },
-    el("h3", {}, "Chain"),
+    el("h3", {}, "Zincir"),
     dl([
       // Reported, never recomputed here. The server verified it; this says so.
-      ["Verified", verdict(proof.valid,
+      ["Doğrulandı", verdict(proof.valid,
         proof.valid
-          ? `${proof.records} ${proof.records === 1 ? "record" : "records"} intact`
-          : `broken at ${proof.brokenAt}`)],
-      ["Root hash", el("span", { class: "mono" }, short(proof.rootHash))],
-      ["Checked", when(proof.checkedAt)],
-      ["Retention", retention.windowSeconds
-        ? `${Math.round(retention.windowSeconds / 86400)} days, current deploy kept`
-        : "kept indefinitely"],
+          ? `${proof.records} kayıt sağlam`
+          : `${proof.brokenAt} noktasında kırık`)],
+      ["Kök hash", el("span", { class: "mono" }, short(proof.rootHash))],
+      ["Kontrol edildi", when(proof.checkedAt)],
+      ["Saklama", retention.windowSeconds
+        ? `${Math.round(retention.windowSeconds / 86400)} gün, çalışan deploy saklanır`
+        : "süresiz saklanır"],
     ])));
 
   parts.push(el("div", { class: "box", style: "margin-top:1rem" },
-    el("h3", {}, "History"),
+    el("h3", {}, "Geçmiş"),
     history.records.length
-      ? table(["#", "State", "Image", "Commit", "When"],
+      ? table(["#", "Durum", "İmaj", "Commit", "Ne zaman"],
           history.records.map((r) => [
             String(r.seq), r.state, r.image.requestedRef || "—",
             el("span", { class: "mono" }, short(r.source.commitSha)), when(r.createdAt),
           ]))
-      : el("p", { class: "muted" }, "No deploys recorded yet.")));
+      : el("p", { class: "muted" }, "Henüz kaydedilmiş deploy yok.")));
 
   parts.push(el("div", { class: "actions" },
-    el("a", { href: `${prefix}/export`, download: "" }, "Download the full log (JSONL)"),
-    el("span", { class: "muted" }, "Every record, oldest first, in the form the chain was computed over.")));
+    el("a", { href: `${prefix}/export`, download: "" }, "Tüm kaydı indir (JSONL)"),
+    el("span", { class: "muted" }, "Her kayıt, en eskisi önce, zincirin üzerinde hesaplandığı biçimde.")));
 
   // The health box, mounted rather than rendered, because it reloads on its own
   // button and the rest of this page does not.
@@ -767,16 +767,16 @@ async function showEvidence() {
   // And what the process is writing, under what the platform knows about it.
   // Last because it is the only thing on the page that keeps arriving.
   const logs = el("div", { class: "box", style: "margin-top:1rem" },
-    el("h3", {}, "Logs"));
+    el("h3", {}, "Loglar"));
   parts.push(logs);
 
   // And the one box on this page that does something rather than showing
   // something. Below the logs on purpose: the command somebody runs here is
   // usually the answer to what the logs above it just said.
   const run = el("div", { class: "box", style: "margin-top:1rem" },
-    el("h3", {}, "Run a command"),
+    el("h3", {}, "Komut çalıştır"),
     el("p", { class: "muted" },
-      "Runs once, in one container, as the application user. Owner only."));
+      "Bir kez, tek bir konteynerde, uygulama kullanıcısı olarak çalışır. Yalnızca sahip."));
   parts.push(run);
 
   render(...parts);
@@ -851,9 +851,9 @@ function fail(err) {
   $("signin").hidden = true;
   $("app").hidden = false;
   render(
-    el("h2", {}, "This page could not be loaded"),
+    el("h2", {}, "Bu sayfa yüklenemedi"),
     el("p", { class: "error" }, String(err && err.message ? err.message : err)),
-    el("p", { class: "muted" }, "The session is fine. This is a fault in the panel or the API behind it."),
+    el("p", { class: "muted" }, "Oturum sorunsuz. Bu, panelde ya da arkasındaki API'de bir hata."),
   );
 }
 

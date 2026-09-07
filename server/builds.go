@@ -178,7 +178,7 @@ func createBuild(g guard, st stores) http.Handler {
 
 		var req createBuildRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody)).Decode(&req); err != nil {
-			problem(w, http.StatusBadRequest, "the request body is not the expected JSON")
+			problem(w, http.StatusBadRequest, "istek gövdesi beklenen JSON değil")
 			return
 		}
 		build, err := buildFor(st.registry, ref.TenantID, ref.App, req)
@@ -189,7 +189,7 @@ func createBuild(g guard, st stores) http.Handler {
 
 		if st.builds == nil {
 			problem(w, http.StatusNotImplemented,
-				"this installation cannot start builds: the control plane has no permission to create them in "+
+				"bu kurulum derleme başlatamıyor: kontrol düzleminin şurada derleme oluşturma izni yok: "+
 					BuildNamespace)
 			return
 		}
@@ -201,8 +201,8 @@ func createBuild(g guard, st stores) http.Handler {
 			// once, and the fix is an ordering — the Build CRD goes in before
 			// the quota that counts it. See cluster/build-namespace.yaml.
 			problem(w, http.StatusInternalServerError,
-				"this installation's build quota cannot count Build objects: the Build CRD has "+
-					"to be installed before the quota that counts it. The API server said: "+
+				"bu kurulumun derleme kotası Build nesnelerini sayamıyor: Build CRD'si, onu sayan "+
+					"kotadan önce kurulmuş olmalı. API sunucusu şunu söyledi: "+
 					err.Error())
 			return
 		case isQuotaExhausted(err):
@@ -210,19 +210,19 @@ func createBuild(g guard, st stores) http.Handler {
 			// reported as it. 503 rather than 500: nothing is broken, there is
 			// no room, and the operator's collector frees some as builds finish.
 			problem(w, http.StatusServiceUnavailable,
-				"this installation has no room for another build record in "+BuildNamespace+
-					": the namespace quota is full and the records are collected as builds "+
-					"finish. The API server said: "+err.Error())
+				"bu kurulumda "+BuildNamespace+" içinde bir derleme kaydı daha için yer yok"+
+					": namespace kotası dolu ve kayıtlar derlemeler bittikçe toplanıyor. "+
+					"API sunucusu şunu söyledi: "+err.Error())
 			return
 		case apierrors.IsForbidden(err):
 			// The wiring exists and the permission does not. Named apart from
 			// every other cluster failure because it is the one an operator
 			// fixes in the chart rather than by retrying.
 			problem(w, http.StatusNotImplemented,
-				"the control plane is not permitted to create builds in "+BuildNamespace)
+				"kontrol düzleminin şurada derleme oluşturma izni yok: "+BuildNamespace)
 			return
 		case err != nil:
-			problem(w, http.StatusBadGateway, "the build could not be started: "+err.Error())
+			problem(w, http.StatusBadGateway, "derleme başlatılamadı: "+err.Error())
 			return
 		}
 
@@ -275,24 +275,24 @@ func buildFor(registry, tenantID, app string, req createBuildRequest) (*platform
 
 	switch {
 	case repo == "":
-		return nil, fmt.Errorf("a build needs the repository to clone")
+		return nil, fmt.Errorf("bir derleme için klonlanacak depo gerekir")
 	case !strings.HasPrefix(repo, "https://") && !strings.HasPrefix(repo, "git@"):
-		return nil, fmt.Errorf("the repository must be an https:// or git@ URL")
+		return nil, fmt.Errorf("depo bir https:// ya da git@ URL'si olmalı")
 	// Refused here as well as by the API server, so the caller is told at the
 	// endpoint rather than by a CEL message. Same reason as the rule there: the
 	// URL is the one place a credential can enter this field, the field is
 	// immutable, and nothing deletes the object it lands on.
 	case credentialInURL(repo):
 		return nil, fmt.Errorf(
-			"the repository URL must not carry credentials — this is recorded permanently " +
-				"and cannot be removed; use a public repository, or a deploy key on the platform")
+			"depo URL'si kimlik bilgisi taşımamalı — bu kalıcı olarak kaydedilir ve " +
+				"silinemez; herkese açık bir depo ya da platformda bir deploy anahtarı kullanın")
 	case !revisionPattern.MatchString(revision):
 		// Not a branch, and this is the rule most likely to be hit. A record
 		// that says "built main" cannot answer which main, which is the only
 		// question anybody asks of a build afterwards.
-		return nil, fmt.Errorf("a build needs a full 40-character commit sha, lowercase")
+		return nil, fmt.Errorf("bir derleme için 40 karakterlik tam commit sha'sı gerekir, küçük harfle")
 	case strings.HasPrefix(path, "/") || strings.Contains(path, ".."):
-		return nil, fmt.Errorf("the path must be relative and must not climb out of the repository")
+		return nil, fmt.Errorf("yol göreli olmalı ve depodan dışarı çıkmamalı")
 	}
 
 	method := platformv1alpha1.BuildMethod(strings.TrimSpace(req.Builder))
@@ -304,7 +304,7 @@ func buildFor(registry, tenantID, app string, req createBuildRequest) (*platform
 		method = platformv1alpha1.BuildDetect
 	case platformv1alpha1.BuildDetect, platformv1alpha1.BuildDockerfile, platformv1alpha1.BuildBuildpack:
 	default:
-		return nil, fmt.Errorf("the builder must be detect, dockerfile or buildpack")
+		return nil, fmt.Errorf("derleyici detect, dockerfile ya da buildpack olmalı")
 	}
 
 	if image == "" {
@@ -324,7 +324,7 @@ func buildFor(registry, tenantID, app string, req createBuildRequest) (*platform
 	// last path segment and not in the whole string, because a registry carries
 	// a port and `registry.damga-registry.svc:5000/ci/app` has a colon in it.
 	if segs := strings.Split(image, "/"); strings.Contains(segs[len(segs)-1], ":") {
-		return nil, fmt.Errorf("the image must not carry a tag; the revision is appended")
+		return nil, fmt.Errorf("imaj bir etiket taşımamalı; revizyon sona eklenir")
 	}
 
 	return &platformv1alpha1.Build{

@@ -146,7 +146,7 @@ func hooks(st stores) http.Handler {
 			// 404 rather than 400: the path names a provider that does not
 			// exist here, and a forge that gets 400 will retry a delivery that
 			// can never succeed.
-			problem(w, http.StatusNotFound, "no webhook provider by that name")
+			problem(w, http.StatusNotFound, "bu adda bir webhook sağlayıcısı yok")
 			return
 		}
 
@@ -161,7 +161,7 @@ func hooks(st stores) http.Handler {
 			writeJSON(w, map[string]any{"pong": true})
 			return
 		case "":
-			problem(w, http.StatusBadRequest, "this endpoint expects a "+githubEventHeader+" header")
+			problem(w, http.StatusBadRequest, "bu uç bir "+githubEventHeader+" başlığı bekliyor")
 			return
 		default:
 			// Accepted and dropped. A repository's webhook is often configured
@@ -176,18 +176,18 @@ func hooks(st stores) http.Handler {
 		// leave nothing to verify against.
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxHookBody))
 		if err != nil {
-			problem(w, http.StatusRequestEntityTooLarge, "the delivery is larger than this endpoint accepts")
+			problem(w, http.StatusRequestEntityTooLarge, "teslimat bu ucun kabul ettiğinden büyük")
 			return
 		}
 
 		var event pushEvent
 		if err := json.Unmarshal(body, &event); err != nil {
-			problem(w, http.StatusBadRequest, "the delivery is not the expected JSON")
+			problem(w, http.StatusBadRequest, "teslimat beklenen JSON değil")
 			return
 		}
 		repo := event.repoURL()
 		if repo == "" {
-			problem(w, http.StatusBadRequest, "the delivery names no repository")
+			problem(w, http.StatusBadRequest, "teslimat hiçbir depo adı taşımıyor")
 			return
 		}
 
@@ -200,7 +200,7 @@ func hooks(st stores) http.Handler {
 		// point reads `event` again until the signature has verified.
 		candidates, err := st.placement.TriggersFor(r.Context(), providerGitHub, repo)
 		if err != nil {
-			problem(w, http.StatusInternalServerError, "reading the webhook triggers failed")
+			problem(w, http.StatusInternalServerError, "webhook tetikleyicileri okunamadı")
 			return
 		}
 		matched := verifyGitHub(body, r.Header.Get(githubSignatureHeader), candidates)
@@ -209,7 +209,7 @@ func hooks(st stores) http.Handler {
 			// a repository with no webhook registered, and a signature that
 			// did not verify. Telling them apart is what would let somebody
 			// map the install.
-			problem(w, http.StatusUnauthorized, "the delivery could not be verified")
+			problem(w, http.StatusUnauthorized, "teslimat doğrulanamadı")
 			return
 		}
 
@@ -218,7 +218,7 @@ func hooks(st stores) http.Handler {
 		case event.Deleted || event.After == deletedRevision:
 			// A branch was deleted. There is no commit to build and the
 			// forty-zero revision would be cloned as a ref that does not exist.
-			ignore(w, "a deleted branch has nothing to build")
+			ignore(w, "silinmiş bir dalda derlenecek bir şey yok")
 			return
 		case !isDefaultBranch(event):
 			// Only the repository's default branch, and this is a decision
@@ -229,7 +229,7 @@ func hooks(st stores) http.Handler {
 			// work nobody asked to deploy. The field that would replace this
 			// guess is named in the report; until it exists, the honest
 			// default is the branch the forge itself calls default.
-			ignore(w, "only pushes to the default branch build, and this is "+event.Ref)
+			ignore(w, "yalnızca varsayılan dala yapılan push'lar derlenir, bu ise "+event.Ref)
 			return
 		}
 
@@ -257,12 +257,12 @@ func hooks(st stores) http.Handler {
 				// Saying "cannot" rather than "failed" is what sends the reader
 				// to the chart instead of to the retry button.
 				problem(w, http.StatusNotImplemented,
-					"this installation cannot start builds: the control plane has no permission to create them in "+
+					"bu kurulum derleme başlatamıyor: kontrol düzleminin şurada derleme oluşturma izni yok: "+
 						BuildNamespace)
 				return
 			}
 			if err := st.builds.CreateBuild(r.Context(), build); err != nil {
-				problem(w, http.StatusBadGateway, "the build could not be started: "+err.Error())
+				problem(w, http.StatusBadGateway, "derleme başlatılamadı: "+err.Error())
 				return
 			}
 			started = append(started, startedBuild{

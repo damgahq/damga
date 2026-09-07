@@ -246,7 +246,7 @@ func TestTheAnswerCarriesTheSecretsNameAndNotItsValue(t *testing.T) {
 	}
 	// The sentence about what this costs, from the server rather than invented
 	// by the page — so the two halves cannot end up saying different things.
-	if !strings.Contains(body, "no rollback") {
+	if !strings.Contains(body, "geri alma yoktur") {
 		t.Error("the answer does not carry the note about a value git does not have")
 	}
 }
@@ -319,53 +319,53 @@ func TestTheRefusalsSayWhichFieldAndWhy(t *testing.T) {
 		{
 			"an empty value on a secret is not a way to clear it",
 			`{"env":[{"key":"A","value":"","secret":true,"runtime":true}],"health":{},"resources":{}}`,
-			"leave A out of the list",
+			"A değişkenini kaldırmak için listeden çıkarın",
 		},
 		{
 			"a build-time secret has nowhere to live",
 			`{"env":[{"key":"A","value":"x","secret":true,"build":true}],"health":{},"resources":{}}`,
-			"builds run in their own namespace",
+			"derlemeler kendi namespace'lerinde çalışır",
 		},
 		{
 			"a variable that is neither is delivered nowhere",
 			`{"env":[{"key":"A","value":"x"}],"health":{},"resources":{}}`,
-			"neither a build-time nor a run-time variable",
+			"ne derleme zamanı ne de çalışma zamanı değişkeni",
 		},
 		{
 			"a name envFrom would silently skip",
 			`{"env":[{"key":"a.b","value":"x","runtime":true}],"health":{},"resources":{}}`,
-			"not a usable environment variable name",
+			"kullanılabilir bir ortam değişkeni adı değil",
 		},
 		{
 			"one variable, one value",
 			`{"env":[{"key":"A","value":"1","runtime":true},{"key":"A","value":"2","runtime":true}],
 			  "health":{},"resources":{}}`,
-			"listed twice",
+			"listede iki kez var",
 		},
 		{
 			"a literal with no value at all",
 			`{"env":[{"key":"A","runtime":true}],"health":{},"resources":{}}`,
-			"send one, and send",
+			"bir değer gönderin, boş olması gerekiyorsa",
 		},
 		{
 			"a probe that is still running when the next one is due",
 			`{"env":[],"health":{"intervalSeconds":5,"timeoutSeconds":30},"resources":{}}`,
-			"timeout cannot be longer than the interval",
+			"zaman aşımı, problar arasındaki aralıktan uzun olamaz",
 		},
 		{
 			"a memory limit below the request, which the kubelet refuses",
 			`{"env":[],"health":{},"resources":{"memoryRequest":"512Mi","memoryLimit":"128Mi"}}`,
-			"below the memory request",
+			"bellek isteğinin (512Mi) altında",
 		},
 		{
 			"a quantity that is not one",
 			`{"env":[],"health":{},"resources":{"cpuRequest":"a lot"}}`,
-			"is not a quantity",
+			"bir miktar değil",
 		},
 		{
 			"a secret that was never set cannot be kept",
 			`{"env":[{"key":"NEW_ONE","secret":true,"runtime":true}],"health":{},"resources":{}}`,
-			"a secret that was never set cannot be kept",
+			"hiç ayarlanmamış bir sır korunamaz",
 		},
 	}
 	for _, tc := range cases {
@@ -431,7 +431,7 @@ func TestChangingOnlyASecretValueIsCommittedWithoutTheValue(t *testing.T) {
 		}
 	}
 	// And the answer does not let "committed" be read as "recoverable".
-	if !strings.Contains(body, "not in the commit") {
+	if !strings.Contains(body, "commit'te yer almaz") {
 		t.Errorf("the answer does not say the value is outside the commit:\n%s", body)
 	}
 }
@@ -448,7 +448,7 @@ func TestWithNoPlaceToPutASecretTheAnswerSaysSo(t *testing.T) {
 	if code != http.StatusConflict {
 		t.Fatalf("PUT = %d, want 409: %s", code, body)
 	}
-	if !strings.Contains(body, "cannot hold a secret value") {
+	if !strings.Contains(body, "bir sır değeri tutamıyor") {
 		t.Errorf("the refusal is %s", body)
 	}
 
@@ -510,7 +510,7 @@ func TestABuildTimeVariableIsKeptAndDeclaredUnconsumed(t *testing.T) {
 		t.Errorf("a variable that is both build-time and run-time lost its run-time half: %v",
 			app.Spec.Env)
 	}
-	if !strings.Contains(body, "nothing consumes them") {
+	if !strings.Contains(body, "kullanan bir şey yok") {
 		t.Errorf("the answer does not say the build never receives it:\n%s", body)
 	}
 
@@ -538,7 +538,7 @@ func TestConfiguringSomethingThatWasNeverDeployedSaysSo(t *testing.T) {
 	if code != http.StatusConflict {
 		t.Fatalf("PUT = %d, want 409: %s", code, body)
 	}
-	if !strings.Contains(body, "nothing is deployed here yet") {
+	if !strings.Contains(body, "buraya henüz hiçbir şey deploy edilmedi") {
 		t.Errorf("the refusal is %s", body)
 	}
 
@@ -668,7 +668,7 @@ func TestASaveBeforeTheNamespaceHasThePermissionSaysWhichHalfIsMissing(t *testin
 	if !strings.Contains(body, nsHomeProd) {
 		t.Errorf("the refusal does not name the namespace it is about: %s", body)
 	}
-	if !strings.Contains(body, "Argo CD has not applied it yet") {
+	if !strings.Contains(body, "Argo CD onu henüz uygulamadı") {
 		t.Errorf("the refusal does not say what is missing or when it arrives: %s", body)
 	}
 	if commitsOnMain(t, l.repo) != before {

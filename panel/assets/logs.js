@@ -72,13 +72,13 @@ function appendLine(lines, event, max = MAX_LINES) {
 function streamStatus(kind, detail = "") {
   switch (kind) {
     case "connecting":
-      return { text: "connecting…", ok: null };
+      return { text: "bağlanılıyor…", ok: null };
     case "live":
-      return { text: "live", ok: true };
+      return { text: "canlı", ok: true };
     case "ended":
-      return { text: detail || "the stream ended", ok: null };
+      return { text: detail || "akış sona erdi", ok: null };
     case "failed":
-      return { text: detail || "the stream stopped", ok: false };
+      return { text: detail || "akış durdu", ok: false };
     default:
       return { text: kind, ok: null };
   }
@@ -155,7 +155,7 @@ function mountLogs(el, base, options = {}) {
       failures += 1;
       const wait = nextRetry(failures);
       if (wait === null) {
-        paint("failed", "the stream stopped and did not come back");
+        paint("failed", "akış durdu ve geri gelmedi");
         return;
       }
       paint("connecting");

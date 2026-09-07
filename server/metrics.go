@@ -147,7 +147,7 @@ func appMetrics(g guard, st stores) http.Handler {
 func appMetricsFrom(g guard, st stores, open func() (MetricsSource, error)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := sameOrigin(r); err != nil {
-			problem(w, http.StatusForbidden, "cross-origin request refused")
+			problem(w, http.StatusForbidden, "çapraz kaynaklı istek reddedildi")
 			return
 		}
 		// app:view. Reading whether your own application is healthy is the
@@ -161,10 +161,10 @@ func appMetricsFrom(g guard, st stores, open func() (MetricsSource, error)) http
 		place, err := st.placement.Get(r.Context(), ref.TenantID, ref.App, ref.Env)
 		switch {
 		case errors.Is(err, placement.ErrNotFound):
-			problem(w, http.StatusNotFound, "this app and environment have no repository configured yet")
+			problem(w, http.StatusNotFound, "bu uygulama ve ortam için henüz bir depo tanımlı değil")
 			return
 		case err != nil:
-			problem(w, http.StatusInternalServerError, "reading the placement failed")
+			problem(w, http.StatusInternalServerError, "yerleşim kaydı okunamadı")
 			return
 		}
 
@@ -172,13 +172,13 @@ func appMetricsFrom(g guard, st stores, open func() (MetricsSource, error)) http
 		if err != nil {
 			slog.Warn("app metrics are unavailable", "error", err)
 			problem(w, http.StatusNotImplemented,
-				"this installation cannot read pod state from the cluster")
+				"bu kurulum kümeden pod durumunu okuyamıyor")
 			return
 		}
 
 		got, err := src.ForApp(r.Context(), place.Namespace, ref.App)
 		if err != nil {
-			problem(w, http.StatusBadGateway, "reading the app's pods failed: "+err.Error())
+			problem(w, http.StatusBadGateway, "uygulamanın pod'ları okunamadı: "+err.Error())
 			return
 		}
 		writeJSON(w, toWireMetrics(place.Namespace, ref.App, ref.Env, got))
@@ -253,7 +253,7 @@ func (c clusterMetrics) ForApp(ctx context.Context, namespace, app string) (AppM
 	// user reading one app's logs beside another app's memory.
 	pods, err := c.pods.Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: podSelector(app)})
 	if err != nil {
-		return AppMetrics{}, fmt.Errorf("listing the pods: %w", err)
+		return AppMetrics{}, fmt.Errorf("pod'lar listelenemedi: %w", err)
 	}
 
 	out := AppMetrics{Pods: make([]PodSample, 0, len(pods.Items))}
@@ -286,8 +286,8 @@ func (c clusterMetrics) ForApp(ctx context.Context, namespace, app string) (AppM
 			// app: every pod came back with no usage under a source that
 			// claimed to have answered, which is the ambiguity this endpoint
 			// exists to avoid.
-			out.UsageNote = "metrics.k8s.io answered but has no sample for these pods yet: a container " +
-				"that has just started, or is restarting faster than the scrape interval, is never scraped"
+			out.UsageNote = "metrics.k8s.io cevap verdi ama bu pod'lar için henüz örneği yok: yeni " +
+				"başlamış ya da toplama aralığından hızlı yeniden başlayan bir konteyner hiç örneklenmez"
 		}
 	}
 	return out, nil
@@ -312,20 +312,20 @@ func (c clusterMetrics) usage(ctx context.Context, namespace, app string) (map[s
 		// the ordinary state of an install without metrics-server, and it is
 		// not something the person reading the page did wrong.
 		return nil, fmt.Errorf(
-			"live CPU and memory need metrics-server, and metrics.k8s.io is not answering in this cluster")
+			"canlı CPU ve bellek için metrics-server gerekiyor, ve bu kümede metrics.k8s.io cevap vermiyor")
 	case apierrors.IsForbidden(err):
 		// Distinct from the above, because the fix is different and lives in a
 		// file rather than in a helm install: the control plane's ClusterRole
 		// has to grant pods on metrics.k8s.io.
 		return nil, fmt.Errorf(
-			"the control plane is not permitted to read metrics.k8s.io; see the ClusterRole in cluster/control-plane.yaml")
+			"kontrol düzleminin metrics.k8s.io'yu okuma izni yok; cluster/control-plane.yaml içindeki ClusterRole'e bakın")
 	case err != nil:
-		return nil, fmt.Errorf("reading metrics.k8s.io: %w", err)
+		return nil, fmt.Errorf("metrics.k8s.io okunamadı: %w", err)
 	}
 
 	var list podMetricsList
 	if err := json.Unmarshal(body, &list); err != nil {
-		return nil, fmt.Errorf("metrics.k8s.io answered something this cannot read: %w", err)
+		return nil, fmt.Errorf("metrics.k8s.io okunamayan bir cevap verdi: %w", err)
 	}
 
 	out := make(map[string]podUsage, len(list.Items))

@@ -40,10 +40,10 @@ func currentEvidence(g guard, st stores) http.Handler {
 		case errors.Is(err, evidence.ErrNotFound):
 			// Not an error. An app that has never been deployed is a normal
 			// state and the page has to render it as one.
-			problem(w, http.StatusNotFound, "nothing has been deployed here yet")
+			problem(w, http.StatusNotFound, "buraya henüz hiçbir şey deploy edilmedi")
 			return
 		case err != nil:
-			problem(w, http.StatusInternalServerError, "reading the evidence store failed")
+			problem(w, http.StatusInternalServerError, "kanıt deposu okunamadı")
 			return
 		}
 		writeJSON(w, toWireRecord(rec))

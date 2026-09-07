@@ -69,7 +69,7 @@ function envRowView(entry, secretNote = "") {
       // control plane holds create and patch on Secrets and deliberately not
       // get — so there is nothing here to show even by mistake.
       shown: false,
-      text: "set — not shown, and not in git",
+      text: "ayarlı — gösterilmiyor, ve git'te değil",
       inGit: false,
       // The server's sentence when it sent one. It carries the 2026-09-04
       // decision and the 2026-09-02 measurement behind it, and printing the
@@ -83,7 +83,7 @@ function envRowView(entry, secretNote = "") {
     return {
       state: "empty",
       shown: true,
-      text: "set to the empty string",
+      text: "boş dizeye ayarlı",
       inGit: true,
       warning: "",
       ok: null,
@@ -96,8 +96,8 @@ function envRowView(entry, secretNote = "") {
 // at the same two facts the endpoint's longer sentence carries, so a page
 // talking to an older control plane still says the thing that matters.
 const SECRET_NOTE_FALLBACK =
-  "not in git: this value cannot be rolled back, and if the Secret is deleted " +
-  "nothing puts it back";
+  "git'te değil: bu değer geri alınamaz, ve Secret silinirse hiçbir şey onu " +
+  "geri koymaz";
 
 // Where a variable applies, as two independent facts.
 //
@@ -107,10 +107,10 @@ const SECRET_NOTE_FALLBACK =
 // worth naming — a variable that applies nowhere is almost always a mistake,
 // and it is the one this sentence exists to make visible.
 function scopeText(entry) {
-  if (entry.build && entry.runtime) return "build and runtime";
-  if (entry.build) return "build only";
-  if (entry.runtime) return "runtime only";
-  return "neither build nor runtime — this variable is not applied anywhere";
+  if (entry.build && entry.runtime) return "derleme ve çalışma zamanı";
+  if (entry.build) return "yalnızca derleme";
+  if (entry.runtime) return "yalnızca çalışma zamanı";
+  return "ne derleme ne çalışma zamanı — bu değişken hiçbir yere uygulanmıyor";
 }
 
 // Whether a scope is a mistake worth marking. Kept apart from the sentence so
@@ -164,11 +164,11 @@ function refusalText(status, body) {
   if (detail) return detail;
   switch (status) {
     case 403:
-      return "changing settings is not permitted for this account";
+      return "bu hesabın ayarları değiştirme izni yok";
     case 404:
-      return "this app and environment have no repository configured yet";
+      return "bu uygulama ve ortam için henüz bir depo tanımlı değil";
     default:
-      return `the settings were refused with ${status} and no detail`;
+      return `ayarlar ${status} ile ve hiçbir ayrıntı vermeden reddedildi`;
   }
 }
 
@@ -188,9 +188,9 @@ function savedText(response) {
   const record = body.record || null;
   if (record) {
     const sha = record.commit || record.sha || record.source?.commit || "";
-    return sha ? `committed ${String(sha).slice(0, 7)}` : "committed";
+    return sha ? `${String(sha).slice(0, 7)} olarak commit edildi` : "commit edildi";
   }
-  return "saved — nothing was committed, because git does not carry secret values";
+  return "kaydedildi — hiçbir şey commit edilmedi, çünkü git sır değerlerini taşımıyor";
 }
 
 // The server's own warnings, printed rather than interpreted.
@@ -226,11 +226,11 @@ function mountSettings(el, base, options = {}) {
   actions.className = "settings-actions";
   const save = doc.createElement("button");
   save.type = "button";
-  save.textContent = "Save";
+  save.textContent = "Kaydet";
   const add = doc.createElement("button");
   add.type = "button";
   add.className = "link";
-  add.textContent = "Add a variable";
+  add.textContent = "Değişken ekle";
   actions.replaceChildren(add, save);
   const errors = doc.createElement("ul");
   errors.className = "refusal";
@@ -270,8 +270,8 @@ function mountSettings(el, base, options = {}) {
         const key = doc.createElement("input");
         key.type = "text";
         key.value = row.key || "";
-        key.placeholder = "NAME";
-        key.setAttribute("aria-label", "Variable name");
+        key.placeholder = "AD";
+        key.setAttribute("aria-label", "Değişken adı");
         key.setAttribute("autocomplete", "off");
         key.addEventListener("input", () => { rows[index].key = key.value; });
 
@@ -281,8 +281,8 @@ function mountSettings(el, base, options = {}) {
         // placeholder says what is true instead.
         value.type = "text";
         value.value = view.shown && view.state === "plain" ? row.value : "";
-        value.placeholder = view.state === "secret" ? "leave blank to keep" : view.text;
-        value.setAttribute("aria-label", "Value");
+        value.placeholder = view.state === "secret" ? "korumak için boş bırakın" : view.text;
+        value.setAttribute("aria-label", "Değer");
         // The rule this page inherits from exec: what somebody types here is
         // never stored by the browser. A remembered value undoes the reason
         // the server refuses to log one.
@@ -295,13 +295,13 @@ function mountSettings(el, base, options = {}) {
         const build = doc.createElement("input");
         build.type = "checkbox";
         build.checked = Boolean(row.build);
-        build.setAttribute("aria-label", "Applies at build time");
+        build.setAttribute("aria-label", "Derleme zamanında geçerli");
         build.addEventListener("change", () => { rows[index].build = build.checked; draw(); });
 
         const runtime = doc.createElement("input");
         runtime.type = "checkbox";
         runtime.checked = Boolean(row.runtime);
-        runtime.setAttribute("aria-label", "Applies at runtime");
+        runtime.setAttribute("aria-label", "Çalışma zamanında geçerli");
         runtime.addEventListener("change", () => { rows[index].runtime = runtime.checked; draw(); });
 
         const scope = node("span", { class: "settings-scope" }, scopeText(row));
@@ -314,10 +314,10 @@ function mountSettings(el, base, options = {}) {
         const remove = doc.createElement("button");
         remove.type = "button";
         remove.className = "link";
-        remove.textContent = "Remove";
+        remove.textContent = "Kaldır";
         remove.title = row.secret
-          ? "Removes the variable and its value from the Secret. The value is not in git."
-          : "Removes the variable on the next save.";
+          ? "Değişkeni ve değerini Secret'tan kaldırır. Değer git'te değil."
+          : "Değişkeni bir sonraki kayıtta kaldırır.";
         remove.addEventListener("click", () => {
           rows = rows.filter((_, i) => i !== index);
           draw();
@@ -325,8 +325,8 @@ function mountSettings(el, base, options = {}) {
 
         line.append(
           key, value,
-          node("label", {}, build, "build"),
-          node("label", {}, runtime, "runtime"),
+          node("label", {}, build, "derleme"),
+          node("label", {}, runtime, "çalışma zamanı"),
           scope, remove,
         );
         if (view.warning) {
@@ -346,7 +346,7 @@ function mountSettings(el, base, options = {}) {
     if (stopped) return;
     save.disabled = true;
     showRefusal("");
-    status.textContent = "saving…";
+    status.textContent = "kaydediliyor…";
     status.dataset.ok = "null";
     try {
       const response = await fetcher(settingsUrl(base), {
@@ -357,7 +357,7 @@ function mountSettings(el, base, options = {}) {
       const body = await response.json().catch(() => null);
       if (!response.ok) {
         showRefusal(refusalText(response.status, body));
-        status.textContent = "not saved";
+        status.textContent = "kaydedilmedi";
         status.dataset.ok = "false";
         return;
       }
@@ -378,7 +378,7 @@ function mountSettings(el, base, options = {}) {
       }
     } catch (err) {
       showRefusal(String((err && err.message) || err));
-      status.textContent = "not saved";
+      status.textContent = "kaydedilmedi";
       status.dataset.ok = "false";
     } finally {
       save.disabled = false;
@@ -386,14 +386,14 @@ function mountSettings(el, base, options = {}) {
   });
 
   async function load() {
-    status.textContent = "loading…";
+    status.textContent = "yükleniyor…";
     status.dataset.ok = "null";
     try {
       const response = await fetcher(settingsUrl(base), { method: "GET" });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
         showRefusal(refusalText(response.status, body));
-        status.textContent = "these settings could not be read";
+        status.textContent = "bu ayarlar okunamadı";
         status.dataset.ok = "false";
         return;
       }
@@ -402,13 +402,13 @@ function mountSettings(el, base, options = {}) {
       secretNote = read.secretNote;
       showWarnings(read.warnings);
       status.textContent = rows.length
-        ? `${rows.length} ${rows.length === 1 ? "variable" : "variables"}`
-        : "no variables set";
+        ? `${rows.length} değişken`
+        : "ayarlı değişken yok";
       status.dataset.ok = "true";
       draw();
     } catch (err) {
       showRefusal(String((err && err.message) || err));
-      status.textContent = "these settings could not be read";
+      status.textContent = "bu ayarlar okunamadı";
       status.dataset.ok = "false";
     }
   }

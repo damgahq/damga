@@ -70,21 +70,21 @@ const (
 // cannot say which one is a message the reader has to guess from.
 var (
 	// errNoCommand: the request body carried no argv.
-	errNoCommand = errors.New("no command was given: send {\"command\": [...]} with at least one element")
+	errNoCommand = errors.New("hiçbir komut verilmedi: en az bir eleman içeren {\"command\": [...]} gönderin")
 
 	// errNoRunnablePod: pods exist and none of them can take a command. The
 	// message names the pods and what each is doing, because "not running" is
 	// where a crash loop, an image that will not pull and a pod still being
 	// created all look identical.
-	errNoRunnablePod = errors.New("no pod is running")
+	errNoRunnablePod = errors.New("hiçbir pod çalışmıyor")
 
 	// errAmbiguousContainer: the pod has several containers and the request
 	// named none. Refused rather than guessed — picking the first would run a
 	// migration in a sidecar on the day somebody adds one.
-	errAmbiguousContainer = errors.New("this pod has more than one container")
+	errAmbiguousContainer = errors.New("bu pod'da birden fazla konteyner var")
 
 	// errNoSuchContainer: the named container is not in the pod.
-	errNoSuchContainer = errors.New("no such container")
+	errNoSuchContainer = errors.New("böyle bir konteyner yok")
 )
 
 // ExecTarget is one command, in one container, of one pod.
@@ -184,10 +184,10 @@ func execWith(g guard, st stores, open func() (Execer, error)) http.Handler {
 		place, err := st.placement.Get(r.Context(), ref.TenantID, ref.App, ref.Env)
 		switch {
 		case errors.Is(err, placement.ErrNotFound):
-			problem(w, http.StatusNotFound, "this app and environment have no repository configured yet")
+			problem(w, http.StatusNotFound, "bu uygulama ve ortam için henüz bir depo tanımlı değil")
 			return
 		case err != nil:
-			problem(w, http.StatusInternalServerError, "reading the placement failed")
+			problem(w, http.StatusInternalServerError, "yerleşim kaydı okunamadı")
 			return
 		}
 
@@ -198,7 +198,7 @@ func execWith(g guard, st stores, open func() (Execer, error)) http.Handler {
 			// different from saying the command failed.
 			slog.Warn("exec is unavailable", "error", err)
 			problem(w, http.StatusNotImplemented,
-				"this installation cannot run commands in the cluster")
+				"bu kurulum kümede komut çalıştıramıyor")
 			return
 		}
 
@@ -240,18 +240,18 @@ func execRequestFrom(w http.ResponseWriter, r *http.Request) ([]string, string, 
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&body); err != nil {
-		return nil, "", fmt.Errorf("reading the request: %w", err)
+		return nil, "", fmt.Errorf("istek okunamadı: %w", err)
 	}
 	if len(body.Command) == 0 {
 		return nil, "", errNoCommand
 	}
 	if len(body.Command) > maxCommandArgs {
-		return nil, "", fmt.Errorf("the command has %d arguments and the limit is %d",
+		return nil, "", fmt.Errorf("komutta %d argüman var, sınır ise %d",
 			len(body.Command), maxCommandArgs)
 	}
 	for i, arg := range body.Command {
 		if len(arg) > maxCommandArg {
-			return nil, "", fmt.Errorf("argument %d is %d bytes and the limit is %d",
+			return nil, "", fmt.Errorf("%d numaralı argüman %d bayt, sınır ise %d",
 				i, len(arg), maxCommandArg)
 		}
 	}
@@ -322,19 +322,19 @@ func streamExec(w http.ResponseWriter, r *http.Request, runner Execer, t ExecTar
 func execMessage(err error, t ExecTarget) string {
 	switch {
 	case errors.Is(err, ErrNoPods):
-		return fmt.Sprintf("%s has no pods in %s: nothing is deployed, or it is scaled to zero",
+		return fmt.Sprintf("%s uygulamasının %s içinde hiç pod'u yok: ya hiçbir şey deploy edilmedi ya da sıfıra ölçeklendi",
 			t.App, t.Namespace)
 	case errors.Is(err, errNoRunnablePod), errors.Is(err, errAmbiguousContainer),
 		errors.Is(err, errNoSuchContainer):
 		// These already name themselves and what they saw.
 		return err.Error()
 	case apierrors.IsForbidden(err):
-		return "this control plane may not run commands in pods. Its ClusterRole " +
-			"grants pods and pods/log, and pods/exec has to be added to it — " +
-			"see cluster/control-plane.yaml"
+		return "bu kontrol düzlemi pod'larda komut çalıştıramaz. ClusterRole'ü " +
+			"pods ve pods/log veriyor, ve ona pods/exec eklenmesi gerekiyor — " +
+			"bkz. cluster/control-plane.yaml"
 	case apierrors.IsNotFound(err):
-		return "the pod was there when it was chosen and is not there now; it was " +
-			"probably replaced mid-command"
+		return "pod seçildiğinde oradaydı, şimdi orada değil; muhtemelen komut " +
+			"sürerken değiştirildi"
 	default:
 		return err.Error()
 	}
@@ -418,7 +418,7 @@ func (c clusterExec) Exec(ctx context.Context, t ExecTarget, stdout, stderr io.W
 		LabelSelector: podSelector(t.App),
 	})
 	if err != nil {
-		return 0, fmt.Errorf("listing the pods: %w", err)
+		return 0, fmt.Errorf("pod'lar listelenemedi: %w", err)
 	}
 	if len(pods.Items) == 0 {
 		return 0, ErrNoPods
@@ -443,7 +443,7 @@ func (c clusterExec) Exec(ctx context.Context, t ExecTarget, stdout, stderr io.W
 
 	exec, err := remotecommand.NewSPDYExecutor(c.cfg, http.MethodPost, req.URL())
 	if err != nil {
-		return 0, fmt.Errorf("preparing the command: %w", err)
+		return 0, fmt.Errorf("komut hazırlanamadı: %w", err)
 	}
 	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdout: stdout, Stderr: stderr,
@@ -512,7 +512,7 @@ func isReady(pod corev1.Pod) bool {
 // different fixes.
 func podState(pod corev1.Pod) string {
 	if pod.DeletionTimestamp != nil {
-		return "terminating"
+		return "sonlandırılıyor"
 	}
 	for _, cs := range pod.Status.ContainerStatuses {
 		if w := cs.State.Waiting; w != nil && w.Reason != "" {
@@ -520,7 +520,7 @@ func podState(pod corev1.Pod) string {
 		}
 	}
 	if pod.Status.Phase == corev1.PodRunning && !isReady(pod) {
-		return "running but not ready"
+		return "çalışıyor ama hazır değil"
 	}
 	return string(pod.Status.Phase)
 }
@@ -541,19 +541,19 @@ func pickContainer(pod corev1.Pod, want string) (string, error) {
 		if slices.Contains(names, want) {
 			return want, nil
 		}
-		return "", fmt.Errorf("%w %q in pod %s; it has %s",
-			errNoSuchContainer, want, pod.Name, strings.Join(names, ", "))
+		return "", fmt.Errorf("%w: %s pod'unda %q; içinde %s var",
+			errNoSuchContainer, pod.Name, want, strings.Join(names, ", "))
 	}
 	switch len(names) {
 	case 0:
 		// Not reachable through the API server, which rejects a pod with no
 		// containers. Answered anyway, because the alternative is indexing
 		// names[0] on the day something else builds a Pod value.
-		return "", fmt.Errorf("pod %s declares no containers", pod.Name)
+		return "", fmt.Errorf("%s pod'u hiçbir konteyner bildirmiyor", pod.Name)
 	case 1:
 		return names[0], nil
 	default:
-		return "", fmt.Errorf("%w (%s); say which with {\"container\": \"...\"}",
+		return "", fmt.Errorf("%w (%s); hangisi olduğunu {\"container\": \"...\"} ile söyleyin",
 			errAmbiguousContainer, strings.Join(names, ", "))
 	}
 }

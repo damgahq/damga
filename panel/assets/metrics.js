@@ -37,7 +37,7 @@ function usageView(response) {
     return {
       state: "absent",
       columns: false,
-      text: usage.note || "live CPU and memory are unavailable in this installation",
+      text: usage.note || "bu kurulumda canlı CPU ve bellek yok",
       ok: null,
     };
   }
@@ -49,11 +49,11 @@ function usageView(response) {
     return {
       state: "nosample",
       columns: true,
-      text: usage.note || `${usage.source} has no sample for these pods yet`,
+      text: usage.note || `${usage.source} bu pod'lar için henüz örnek taşımıyor`,
       ok: null,
     };
   }
-  return { state: "live", columns: true, text: `live from ${usage.source}`, ok: true };
+  return { state: "live", columns: true, text: `canlı, kaynak: ${usage.source}`, ok: true };
 }
 
 // Whether this replica is serving, which is not the same question as whether it
@@ -70,7 +70,7 @@ function statusView(pod) {
   }
   return pod.ready
     ? { text: "Running", ok: true }
-    : { text: "Running, not ready", ok: false };
+    : { text: "Running, hazır değil", ok: false };
 }
 
 // The restart story, with the reason attached.
@@ -84,15 +84,15 @@ function restartView(pod) {
   const count = pod.restarts || 0;
   const last = pod.lastTerminated;
   if (count === 0) {
-    return { text: "none", ok: true };
+    return { text: "yok", ok: true };
   }
-  const times = `${count} ${count === 1 ? "restart" : "restarts"}`;
+  const times = `${count} yeniden başlatma`;
   if (!last) {
     return { text: times, ok: false };
   }
-  const why = last.reason || `exit ${last.exitCode}`;
-  const code = last.reason && last.exitCode !== undefined ? ` (exit ${last.exitCode})` : "";
-  return { text: `${times} · last ${why}${code}`, ok: false };
+  const why = last.reason || `çıkış kodu ${last.exitCode}`;
+  const code = last.reason && last.exitCode !== undefined ? ` (çıkış kodu ${last.exitCode})` : "";
+  return { text: `${times} · son ${why}${code}`, ok: false };
 }
 
 // One resource as one string, and every part of it comes from the server.
@@ -105,9 +105,9 @@ function restartView(pod) {
 function sampleText(sample, { columns = true } = {}) {
   if (!sample) return "—";
   if (!sample.usage) {
-    return columns ? "no sample yet" : "—";
+    return columns ? "henüz örnek yok" : "—";
   }
-  const against = sample.limit ? ` of ${sample.limit}` : sample.request ? ` of ${sample.request} requested` : "";
+  const against = sample.limit ? ` / ${sample.limit}` : sample.request ? ` / istenen ${sample.request}` : "";
   const percent = sample.ofLimitPercent === undefined || sample.limit === undefined
     ? ""
     : ` (${sample.ofLimitPercent}%)`;
@@ -152,7 +152,7 @@ function mountMetrics(el, base, options = {}) {
   let stopped = false;
 
   const heading = doc.createElement("h3");
-  heading.textContent = "Health";
+  heading.textContent = "Sağlık";
   const status = doc.createElement("p");
   status.className = "muted";
   const body = doc.createElement("div");
@@ -162,23 +162,23 @@ function mountMetrics(el, base, options = {}) {
   const refresh = doc.createElement("button");
   refresh.className = "link";
   refresh.type = "button";
-  refresh.textContent = "Refresh";
+  refresh.textContent = "Yenile";
 
   el.replaceChildren(heading, status, body, foot, refresh);
 
   const draw = (response) => {
     const view = usageView(response);
-    status.textContent = `${view.text} · as of ${now().toLocaleTimeString()}`;
+    status.textContent = `${view.text} · ${now().toLocaleTimeString()} itibarıyla`;
     status.dataset.state = view.state;
 
     const rows = podRows(response);
     if (rows.length === 0) {
       // No replicas at all is its own answer, and it is not an error: an app
       // scaled to zero, or one whose deploy has not been applied yet, has none.
-      body.replaceChildren(muted(doc, "No replicas are running."));
+      body.replaceChildren(muted(doc, "Çalışan replika yok."));
     } else {
-      const headers = ["Replica", "Status", "Restarts"];
-      if (view.columns) headers.push("CPU", "Memory");
+      const headers = ["Replika", "Durum", "Yeniden başlatma"];
+      if (view.columns) headers.push("CPU", "Bellek");
       body.replaceChildren(table(doc, headers, rows.map((row) => {
         const cells = [text(doc, row.name, "mono"), pill(doc, row.status), pill(doc, row.restarts)];
         if (view.columns) cells.push(text(doc, row.cpu), text(doc, row.memory));
@@ -200,7 +200,7 @@ function mountMetrics(el, base, options = {}) {
   const load = async () => {
     if (stopped) return;
     refresh.disabled = true;
-    status.textContent = "loading…";
+    status.textContent = "yükleniyor…";
     delete status.dataset.state;
     try {
       const response = await fetcher(`${base}/metrics`);
@@ -210,7 +210,7 @@ function mountMetrics(el, base, options = {}) {
       // Said as what it is. This endpoint answers 501 on an install whose
       // control plane is not in a cluster, and "could not load" would send the
       // reader looking for a network problem that is not there.
-      status.textContent = err && err.message ? err.message : "the health of this app could not be read";
+      status.textContent = err && err.message ? err.message : "bu uygulamanın sağlığı okunamadı";
       status.dataset.state = "failed";
       body.replaceChildren();
       foot.replaceChildren();

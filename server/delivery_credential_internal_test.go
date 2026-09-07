@@ -223,7 +223,7 @@ func TestASchemeThatCannotBeAuthenticatedIsQuoted(t *testing.T) {
 	if len(rec.applied) != 1 {
 		t.Fatalf("a credential was written for a scheme nothing can authenticate to")
 	}
-	if !strings.Contains(note, "only https repositories are supported") {
+	if !strings.Contains(note, "yalnızca https depoları destekleniyor") {
 		t.Errorf("the note is %q and does not say what was actually wrong", note)
 	}
 }

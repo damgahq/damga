@@ -53,56 +53,56 @@ func TestADatabaseRequestIsRefusedByName(t *testing.T) {
 			call: func() (platformv1alpha1.Database, error) {
 				return databaseFrom("", "postgres", "postgres:17.2", "1Gi", "", "", false, noBackups)
 			},
-			want: []string{"needs a name"},
+			want: []string{"ad gerekir"},
 		},
 		{
 			name: "a name the API server would refuse",
 			call: func() (platformv1alpha1.Database, error) {
 				return databaseFrom("My_DB", "postgres", "postgres:17.2", "1Gi", "", "", false, noBackups)
 			},
-			want: []string{"My_DB", "lower-case"},
+			want: []string{"My_DB", "küçük harfler"},
 		},
 		{
 			name: "an engine this platform does not run",
 			call: func() (platformv1alpha1.Database, error) {
 				return databaseFrom("db", "mysql", "mysql:8", "1Gi", "", "", false, noBackups)
 			},
-			want: []string{"mysql", "postgres and redis"},
+			want: []string{"mysql", "postgres ve redis"},
 		},
 		{
 			name: "an image that floats",
 			call: func() (platformv1alpha1.Database, error) {
 				return databaseFrom("db", "postgres", "postgres:latest", "1Gi", "", "", false, noBackups)
 			},
-			want: []string{"latest", "restart"},
+			want: []string{"latest", "yeniden başlatmasını"},
 		},
 		{
 			name: "an image with no tag at all",
 			call: func() (platformv1alpha1.Database, error) {
 				return databaseFrom("db", "postgres", "postgres", "1Gi", "", "", false, noBackups)
 			},
-			want: []string{"no tag or digest", "data directory"},
+			want: []string{"etiket ya da digest taşımıyor", "veri dizininin"},
 		},
 		{
 			name: "storage that is not a size",
 			call: func() (platformv1alpha1.Database, error) {
 				return databaseFrom("db", "postgres", "postgres:17.2", "big", "", "", false, noBackups)
 			},
-			want: []string{"big", "1Gi", "smaller"},
+			want: []string{"big", "1Gi", "küçültülemiyor"},
 		},
 		{
 			name: "storage of zero",
 			call: func() (platformv1alpha1.Database, error) {
 				return databaseFrom("db", "postgres", "postgres:17.2", "0", "", "", false, noBackups)
 			},
-			want: []string{"greater than zero"},
+			want: []string{"sıfırdan büyük olmalı"},
 		},
 		{
 			name: "a username redis has no use for",
 			call: func() (platformv1alpha1.Database, error) {
 				return databaseFrom("db", "redis", "redis:7.4.10", "1Gi", "", containerApp, false, noBackups)
 			},
-			want: []string{"redis", "numbers its databases"},
+			want: []string{"redis", "numaralandırır"},
 		},
 		{
 			name: "backups on redis, which would run pg_dump",
@@ -116,7 +116,7 @@ func TestADatabaseRequestIsRefusedByName(t *testing.T) {
 			call: func() (platformv1alpha1.Database, error) {
 				return databaseFrom("db", "postgres", "postgres:17.2", "1Gi", "", "", true, someBackups("plenty"))
 			},
-			want: []string{"plenty", "separate"},
+			want: []string{"plenty", "ayrıdır"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -268,7 +268,7 @@ func TestASecondDatabaseWithTheSameNameIsRefused(t *testing.T) {
 	if code != http.StatusConflict {
 		t.Fatalf("a duplicate name answered %d, want 409: %s", code, body)
 	}
-	if !strings.Contains(body, "already has a database called") {
+	if !strings.Contains(body, "adlı bir veritabanı var") {
 		t.Errorf("the refusal does not say what the conflict is: %s", body)
 	}
 }
@@ -296,7 +296,7 @@ func TestRemovingADatabaseSaysWhatBecomesOfTheData(t *testing.T) {
 	if code != http.StatusAccepted {
 		t.Fatalf("removing answered %d: %s", code, body)
 	}
-	for _, want := range []string{"data volume", "backup volume", "four claims", "attach"} {
+	for _, want := range []string{"Veri volume'ü", "yedek volume'ü", "dört claim", "bağlanacak"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the response does not say %q. Somebody removing a database to free "+
 				"space would learn none of it from this: %s", want, body)
@@ -374,7 +374,7 @@ func TestRemovingTheOnlyManifestSaysSoRatherThanFailing(t *testing.T) {
 	if code != http.StatusConflict {
 		t.Fatalf("removing the only manifest answered %d, want 409: %s", code, body)
 	}
-	for _, want := range []string{"only manifest", "unregister the app"} {
+	for _, want := range []string{"commit edilmiş tek manifest", "uygulamanın kaydını silin"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the refusal does not say %q, so it names the problem and not the "+
 				"way out: %s", want, body)

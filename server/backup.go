@@ -100,7 +100,7 @@ func backupRoute(g guard, st stores) http.Handler {
 			// empty status, which would read as "no backups" — the one thing it
 			// must not be mistaken for.
 			problem(w, http.StatusNotImplemented,
-				"this installation cannot read database status from the cluster")
+				"bu kurulum kümeden veritabanı durumunu okuyamıyor")
 			return
 		}
 
@@ -110,10 +110,10 @@ func backupRoute(g guard, st stores) http.Handler {
 		place, err := st.placement.Get(r.Context(), ref.TenantID, ref.App, ref.Env)
 		switch {
 		case errors.Is(err, placement.ErrNotFound):
-			problem(w, http.StatusNotFound, "this app and environment have no repository configured yet")
+			problem(w, http.StatusNotFound, "bu uygulama ve ortam için henüz bir depo tanımlı değil")
 			return
 		case err != nil:
-			problem(w, http.StatusInternalServerError, "reading the placement failed")
+			problem(w, http.StatusInternalServerError, "yerleşim kaydı okunamadı")
 			return
 		}
 
@@ -123,10 +123,10 @@ func backupRoute(g guard, st stores) http.Handler {
 			// 404 and not an empty body. "This app has no database" and "this
 			// app's backups are unknown" are different answers and the page
 			// renders them differently.
-			problem(w, http.StatusNotFound, "this app is not connected to a database")
+			problem(w, http.StatusNotFound, "bu uygulama bir veritabanına bağlı değil")
 			return
 		case err != nil:
-			problem(w, http.StatusBadGateway, "reading the database status failed")
+			problem(w, http.StatusBadGateway, "veritabanı durumu okunamadı")
 			return
 		}
 

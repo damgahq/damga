@@ -294,7 +294,7 @@ func TestCreateBuildRefusesAViewer(t *testing.T) {
 func TestCreateBuildTellsAFullQuotaApartFromAMissingPermission(t *testing.T) {
 	// The answer the other two causes must not produce, named because it is
 	// the whole point: for a long time it was the answer to all three.
-	const notPermitted = "not permitted"
+	const notPermitted = "izni yok"
 
 	forbidden := func(detail string) error {
 		return apierrors.NewForbidden(
@@ -320,7 +320,7 @@ func TestCreateBuildTellsAFullQuotaApartFromAMissingPermission(t *testing.T) {
 				"count/builds.platform.damga.co=1, used: count/builds.platform.damga.co=200, " +
 				"limited: count/builds.platform.damga.co=200"),
 			code:   http.StatusServiceUnavailable,
-			says:   "no room",
+			says:   "yer yok",
 			unsaid: notPermitted,
 		},
 		{
@@ -330,7 +330,7 @@ func TestCreateBuildTellsAFullQuotaApartFromAMissingPermission(t *testing.T) {
 			// ordering that fixes it.
 			err:    forbidden("status unknown for quota: build-quota"),
 			code:   http.StatusInternalServerError,
-			says:   "before the quota that counts it",
+			says:   "onu sayan kotadan önce",
 			unsaid: notPermitted,
 		},
 		{
@@ -338,7 +338,7 @@ func TestCreateBuildTellsAFullQuotaApartFromAMissingPermission(t *testing.T) {
 			err:    forbidden("builds.platform.damga.co is forbidden"),
 			code:   http.StatusNotImplemented,
 			says:   notPermitted,
-			unsaid: "quota",
+			unsaid: "kota",
 		},
 	} {
 		t.Run(tc.what, func(t *testing.T) {

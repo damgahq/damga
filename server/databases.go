@@ -77,14 +77,14 @@ const (
 // The refusals this endpoint tells apart. One message for all of them would be
 // true of each and useful for none: the next move is different every time.
 var (
-	errDatabaseExists = errors.New("that database already exists here")
-	errNoSuchDatabase = errors.New("no database by that name is committed here")
+	errDatabaseExists = errors.New("bu veritabanı burada zaten var")
+	errNoSuchDatabase = errors.New("bu adda bir veritabanı burada commit edilmemiş")
 	// errLastManifest: removing this file would leave the directory empty, and
 	// gitwrite refuses an empty render because it cannot tell one from a render
 	// that failed. Reported as itself rather than as "nothing to write".
 	errLastManifest = errors.New(
-		"this is the only manifest committed here, and removing it would leave the " +
-			"directory empty; unregister the app instead")
+		"burada commit edilmiş tek manifest bu, ve onu kaldırmak dizini boş bırakırdı; " +
+			"onun yerine uygulamanın kaydını silin")
 )
 
 // databaseFrom validates a request into an object the API server will accept.
@@ -102,13 +102,13 @@ func databaseFrom(
 	var zero platformv1alpha1.Database
 	switch {
 	case name == "":
-		return zero, errors.New("a database needs a name")
+		return zero, errors.New("bir veritabanı için ad gerekir")
 	case !databaseName.MatchString(name):
 		return zero, fmt.Errorf(
-			"%q is not a usable name: lower-case letters, digits and dashes, "+
-				"starting and ending with a letter or digit", name)
+			"%q kullanılabilir bir ad değil: küçük harfler, rakamlar ve tireler, "+
+				"başı ve sonu harf ya da rakam", name)
 	case len(name) > 63:
-		return zero, fmt.Errorf("%q is longer than the 63 characters a name may have", name)
+		return zero, fmt.Errorf("%q bir adın alabileceği 63 karakterden uzun", name)
 	}
 
 	kind := platformv1alpha1.DatabaseEngine(engine)
@@ -117,11 +117,11 @@ func databaseFrom(
 	}
 	if kind != platformv1alpha1.EnginePostgres && kind != platformv1alpha1.EngineRedis {
 		return zero, fmt.Errorf(
-			"%q is not an engine this platform runs: postgres and redis are", engine)
+			"%q bu platformun çalıştırdığı bir motor değil: postgres ve redis çalıştırılıyor", engine)
 	}
 
 	if image == "" {
-		return zero, errors.New("a database needs an image, pinned to a tag or a digest")
+		return zero, errors.New("bir veritabanı için bir etikete ya da digest'e sabitlenmiş bir imaj gerekir")
 	}
 	// The CRD's own rule, said in the response instead of in a sync. A tag that
 	// moves is the thing the Database type spends its longest comment on:
@@ -129,26 +129,26 @@ func databaseFrom(
 	// destroys the way back from an upgrade rather than the upgrade.
 	if strings.HasSuffix(image, ":latest") {
 		return zero, errors.New(
-			"the image must not use :latest — a tag that moves turns the next pod " +
-				"restart into an outage nothing connects to the change that caused it")
+			"imaj :latest kullanmamalı — kayan bir etiket, bir sonraki pod yeniden " +
+				"başlatmasını, hiçbir şeyin buna sebep olan değişiklikle ilişkilendiremediği bir kesintiye çevirir")
 	}
 	if !strings.Contains(image, "@") {
 		last := image[strings.LastIndex(image, "/")+1:]
 		if !strings.Contains(last, ":") {
 			return zero, fmt.Errorf(
-				"the image %q carries no tag or digest, so what it runs would change "+
-					"underneath the data directory", image)
+				"%q imajı etiket ya da digest taşımıyor, yani çalıştırdığı şey veri "+
+					"dizininin altında değişirdi", image)
 		}
 	}
 
 	size, err := resource.ParseQuantity(storage)
 	if err != nil {
 		return zero, fmt.Errorf(
-			"%q is not a size: 1Gi and 512Mi are. Storage has no default because it "+
-				"cannot be made smaller later", storage)
+			"%q bir boyut değil: 1Gi ve 512Mi birer boyut. Depolamanın varsayılanı yok, "+
+				"çünkü sonradan küçültülemiyor", storage)
 	}
 	if size.IsZero() || size.Sign() < 0 {
-		return zero, errors.New("storage has to be greater than zero")
+		return zero, errors.New("depolama sıfırdan büyük olmalı")
 	}
 
 	db := platformv1alpha1.Database{
@@ -166,22 +166,22 @@ func databaseFrom(
 		// committed, and mean nothing — a setting that is stored and does
 		// nothing, which is the failure the settings page exists to prevent.
 		return zero, errors.New(
-			"redis takes no database name and no username: it numbers its databases " +
-				"and authenticates with a password alone")
+			"redis ne veritabanı adı ne de kullanıcı adı alır: veritabanlarını " +
+				"numaralandırır ve yalnızca parolayla kimlik doğrular")
 	}
 
 	if wantBackups {
 		if kind == platformv1alpha1.EngineRedis {
 			return zero, errors.New(
-				"redis has no backups here: the schedule would run pg_dump against a " +
-					"server that has never heard of it")
+				"redis'in burada yedeği yok: zamanlama, pg_dump'ı onu hiç duymamış bir " +
+					"sunucuya karşı çalıştırırdı")
 		}
 		schedule, backupSize, retain, rehearse := backups()
 		archive, err := resource.ParseQuantity(backupSize)
 		if err != nil || archive.IsZero() || archive.Sign() < 0 {
 			return zero, fmt.Errorf(
-				"the backup volume %q is not a size greater than zero; it is separate "+
-					"from the data volume so that filling it cannot stop writes", backupSize)
+				"yedek volume'ü %q sıfırdan büyük bir boyut değil; veri volume'ünden "+
+					"ayrıdır, böylece dolması yazmaları durduramaz", backupSize)
 		}
 		db.Spec.Backup = &platformv1alpha1.DatabaseBackup{
 			Schedule: schedule, RetainDays: retain, Storage: archive, Rehearse: &rehearse,
@@ -316,14 +316,14 @@ func readCommitted(
 	place, err := st.placement.Get(r.Context(), ref.TenantID, ref.App, ref.Env)
 	switch {
 	case errors.Is(err, placement.ErrNotFound):
-		problem(w, http.StatusNotFound, "this app and environment have no repository configured yet")
+		problem(w, http.StatusNotFound, "bu uygulama ve ortam için henüz bir depo tanımlı değil")
 		return placement.Placement{}, nil, false
 	case err != nil:
-		problem(w, http.StatusInternalServerError, "reading the placement failed")
+		problem(w, http.StatusInternalServerError, "yerleşim kaydı okunamadı")
 		return placement.Placement{}, nil, false
 	}
 	if st.writer == nil {
-		problem(w, http.StatusNotImplemented, "this installation has no git writer configured")
+		problem(w, http.StatusNotImplemented, "bu kurulumda tanımlı bir git yazıcısı yok")
 		return placement.Placement{}, nil, false
 	}
 	method, err := st.gitAuth.For(place.RepoURL)
@@ -335,7 +335,7 @@ func readCommitted(
 		RepoURL: place.RepoURL, Branch: place.Branch, Dir: place.Path, Auth: method,
 	})
 	if err != nil {
-		problem(w, http.StatusBadGateway, "the repository could not be read: "+err.Error())
+		problem(w, http.StatusBadGateway, "depo okunamadı: "+err.Error())
 		return placement.Placement{}, nil, false
 	}
 	return place, files, true
@@ -364,7 +364,7 @@ func createDatabase(g guard, st stores) http.Handler {
 		}
 		if err := json.NewDecoder(
 			http.MaxBytesReader(w, r.Body, maxRequestBody)).Decode(&req); err != nil {
-			problem(w, http.StatusBadRequest, "reading the request: "+err.Error())
+			problem(w, http.StatusBadRequest, "istek okunamadı: "+err.Error())
 			return
 		}
 
@@ -386,7 +386,7 @@ func createDatabase(g guard, st stores) http.Handler {
 					for _, existing := range committedDatabases(current) {
 						if existing.Name == db.Name {
 							return nil, fmt.Errorf(
-								"%w: this environment already has a database called %q",
+								"%w: bu ortamda zaten %q adlı bir veritabanı var",
 								errDatabaseExists, db.Name)
 						}
 					}
@@ -467,9 +467,9 @@ func deleteDatabase(g guard, st stores) http.Handler {
 
 // dataAfterDelete is what the response says, and every clause in it was
 // measured in the operator rather than assumed.
-const dataAfterDelete = "the database is withdrawn: its StatefulSet, Service and " +
-	"credentials Secret are owned by it and go with it. The data volume and the backup " +
-	"volume do not — Kubernetes leaves a StatefulSet's claims behind on purpose, and the " +
-	"archive claim is created unowned so the garbage collector cannot take it. So the " +
-	"data is still here, it still counts against the namespace's four claims, and a " +
-	"database created again under this name will attach to it rather than start empty."
+const dataAfterDelete = "veritabanı geri çekildi: StatefulSet'i, Service'i ve kimlik " +
+	"bilgilerini tutan Secret'ı ona ait, onunla birlikte gidiyor. Veri volume'ü ve yedek " +
+	"volume'ü gitmiyor — Kubernetes bir StatefulSet'in claim'lerini bilerek geride bırakır, " +
+	"ve arşiv claim'i sahipsiz oluşturulur ki çöp toplayıcı onu alamasın. Yani veri hâlâ " +
+	"burada, namespace'in dört claim'inden hâlâ düşüyor, ve bu adla yeniden oluşturulan bir " +
+	"veritabanı boş başlamak yerine ona bağlanacak."

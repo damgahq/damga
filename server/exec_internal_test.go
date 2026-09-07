@@ -90,7 +90,7 @@ func TestExecPicksARunnablePodAndSaysWhyWhenItCannot(t *testing.T) {
 		{
 			name:  "running but not ready is refused, and named as such",
 			pods:  []corev1.Pod{pod("only", corev1.PodRunning, false)},
-			names: []string{"only", "running but not ready"},
+			names: []string{"only", "çalışıyor ama hazır değil"},
 		},
 		{
 			name:  "a crash loop is named, not reported as 'not running'",
@@ -110,7 +110,7 @@ func TestExecPicksARunnablePodAndSaysWhyWhenItCannot(t *testing.T) {
 				p.DeletionTimestamp = &now
 				return []corev1.Pod{p}
 			}(),
-			names: []string{"going", "terminating"},
+			names: []string{"going", "sonlandırılıyor"},
 		},
 		{
 			name: "the choice does not depend on the order the API server listed them",
@@ -239,19 +239,19 @@ func TestExecNamesWhichFailureItWas(t *testing.T) {
 		{
 			name: "nothing deployed",
 			err:  ErrNoPods,
-			want: []string{appAPI, execNS, "scaled to zero"},
+			want: []string{appAPI, execNS, "sıfıra ölçeklendi"},
 		},
 		{
 			name: "no pod can take it",
 			err:  errNoRunnablePod,
-			want: []string{"no pod is running"},
+			want: []string{"hiçbir pod çalışmıyor"},
 		},
 		{
 			name: "the platform was never granted the right",
 			err:  &apiStatusError{},
 			// Names the fix and the file. The API server's own wording blames
 			// the pod, which sends the reader to the wrong place entirely.
-			want: []string{"pods/exec", "cluster/control-plane.yaml", "may not run commands"},
+			want: []string{"pods/exec", "cluster/control-plane.yaml", "komut çalıştıramaz"},
 			not:  "forbidden",
 		},
 	} {
