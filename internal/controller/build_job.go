@@ -334,7 +334,25 @@ case "$RAN" in
     #
     # And the import is safe on the first build of a repository, when the
     # reference does not exist: measured in the same run, exit 0.
-    buildctl-daemonless.sh build \
+    # The build-time variables, turned into flags here rather than composed in
+    # Go. What is passed into this container is a list of names and one
+    # variable per value, and the reason is that the alternative is a string
+    # somebody has to quote correctly: a value with a space, a quote or a
+    # newline in it would be split by the shell on the way past.
+    #
+    # printenv rather than eval. eval on a name that came from a user is the
+    # shape of every shell injection ever written, and the name here reaches
+    # this line from a form. printenv takes the name as data.
+    #
+    # An unset value is an empty string and not an error: the API refuses a
+    # nameless variable and allows a valueless one, and a build-arg with no
+    # value is a legitimate way to unset one the Dockerfile defaults.
+    set --
+    for name in ${BUILD_ARGS:-}; do
+      set -- "$@" --opt "build-arg:${name}=$(printenv "BUILD_ARG_${name}" || true)"
+    done
+
+    buildctl-daemonless.sh build "$@" \
       --frontend dockerfile.v0 \
       --local context="$SRC" --local dockerfile="$SRC" \
       --output "type=image,name=${IMAGE},push=true,registry.insecure=true" \
@@ -399,6 +417,7 @@ APP=${APP:-/workspace}
 LAYERS=${LAYERS:-/layers}
 LIFECYCLE=${LIFECYCLE:-/cnb/lifecycle}
 ERR=${ERR:-/tmp/phase.err}
+PLATFORM=${PLATFORM:-/tmp/platform}
 
 [ -f "$PREPARED/method" ] || fail "the prepare step ended without saying how this repository should be built"
 # Already built and already reported, by the container that made the decision.
@@ -406,6 +425,28 @@ ERR=${ERR:-/tmp/phase.err}
 [ "$(cat "$PREPARED/method")" = buildpack ] || exit 0
 
 RAN=buildpack
+
+# The build-time variables, in the shape the lifecycle reads them.
+#
+# Not an environment variable on this container, which is what the Dockerfile
+# path uses: the CNB platform specification says a platform passes build-time
+# variables as files under <platform>/env, one file per variable, the file's
+# contents being the value. The lifecycle exports them into the build
+# environment for the detector and the builder, which is where a buildpack
+# looks. A variable left in this container's own environment reaches neither.
+#
+# printf rather than a redirect of printenv, because the file's contents ARE
+# the value: redirecting printenv into the file writes a trailing newline, and
+# the buildpack would receive a value with a line break at the end of it.
+#
+# The directory is made whether or not there is anything to put in it, so the
+# -platform flag below is unconditional and this path has one shape rather than
+# two.
+mkdir -p "$PLATFORM/env" || fail "could not make the platform directory $PLATFORM/env"
+for name in ${BUILD_ARGS:-}; do
+  printf '%s' "$(printenv "BUILD_ARG_${name}" || true)" > "$PLATFORM/env/$name" \
+    || fail "the build-time variable $name could not be written to $PLATFORM/env"
+done
 
 SRC="$PREPARED/src${PATH_IN_REPO:+/$PATH_IN_REPO}"
 [ -d "$SRC" ] || fail "the path $PATH_IN_REPO does not exist in this repository"
@@ -447,7 +488,7 @@ phase() {
 phase "$LIFECYCLE/analyzer" -layers="$LAYERS" "$IMAGE"
 # Which buildpacks want this repository. Exits 20 or 21 when none do, which is
 # the honest answer to "we could not work out what this is".
-phase "$LIFECYCLE/detector" -app="$APP" -layers="$LAYERS"
+phase "$LIFECYCLE/detector" -app="$APP" -layers="$LAYERS" -platform="$PLATFORM"
 # Layers this build can reuse, from two different places. The previous image
 # gives back the layers that ship in it; -cache-image gives back the ones that
 # never do — the module cache, the compiler's own intermediate output — which is
@@ -458,7 +499,7 @@ phase "$LIFECYCLE/detector" -app="$APP" -layers="$LAYERS"
 # ReadWriteOnce against a namespace that admits ten concurrent builds.
 phase "$LIFECYCLE/restorer" -layers="$LAYERS" -cache-image="$CACHE_IMAGE"
 # The user's code, compiled by somebody else's buildpack.
-phase "$LIFECYCLE/builder" -app="$APP" -layers="$LAYERS"
+phase "$LIFECYCLE/builder" -app="$APP" -layers="$LAYERS" -platform="$PLATFORM"
 # Assembles the layers onto the run image and pushes. No -process-type: the
 # buildpacks name their own default, and naming one here that no buildpack
 # provides fails the export.
@@ -477,6 +518,49 @@ DIGEST=$(sed -n 's/^[[:space:]]*digest[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/
 [ -n "$DIGEST" ] || fail "the export finished but no digest could be read from: $(head -c 400 "$LAYERS/report.toml" 2>/dev/null || echo 'no report at all')"
 printf '{"digest":"%s","method":"%s"}' "$DIGEST" "$RAN" > "$RESULT"
 `
+
+// How the build-time variables ride into the container.
+//
+// A list of names in one variable and one variable per value, rather than a
+// single string the script would have to split. A value is user text: a space,
+// a quote or a newline in it would be word-split on the way past, and the
+// failure would be a build that used half a value without saying so.
+//
+// The two names cannot collide with each other whatever a user calls a
+// variable, which is not an accident: the list is BUILD_ARGS and every value is
+// BUILD_ARG_<name>, so a variable called NAMES becomes BUILD_ARG_NAMES and
+// still is not the list. The pair BUILD_ARG_NAMES/BUILD_ARG_<name> was the
+// first spelling and a variable called NAMES would have overwritten it.
+//
+// The prefix is also what keeps a user's variable away from the script's own.
+// Unprefixed, a build-time variable called IMAGE, SRC or METHOD would replace
+// the value this script runs on.
+const (
+	envBuildArgs        = "BUILD_ARGS"
+	buildArgValuePrefix = "BUILD_ARG_"
+)
+
+// buildArgEnv turns the Build's variables into what both scripts read.
+//
+// The same variables reach both containers. Which of the two uses them is
+// decided at run time by the method the prepare step wrote, and a container
+// that carries variables it does not use costs nothing; a container that turns
+// out to need them and does not have them costs a build.
+func buildArgEnv(b *platformv1alpha1.Build) []corev1.EnvVar {
+	if len(b.Spec.Env) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(b.Spec.Env))
+	out := make([]corev1.EnvVar, 0, len(b.Spec.Env)+1)
+	for _, e := range b.Spec.Env {
+		names = append(names, e.Name)
+		out = append(out, corev1.EnvVar{Name: buildArgValuePrefix + e.Name, Value: e.Value})
+	}
+	// Space-separated, which is safe for exactly the reason the values are not:
+	// the API refuses a name that is not a letter or underscore followed by
+	// letters, digits and underscores, so a name can never contain a space.
+	return append(out, corev1.EnvVar{Name: envBuildArgs, Value: strings.Join(names, " ")})
+}
 
 // desiredBuildJob renders the job that turns a commit into an image.
 func desiredBuildJob(b *platformv1alpha1.Build) *batchv1.Job {
@@ -614,14 +698,14 @@ func buildkitSide(
 		Name:    name,
 		Image:   buildkitImage,
 		Command: []string{"sh", "-c", buildScript},
-		Env: []corev1.EnvVar{
+		Env: append(buildArgEnv(b), []corev1.EnvVar{
 			{Name: "REPO", Value: b.Spec.Repo},
 			{Name: "REVISION", Value: b.Spec.Revision},
 			{Name: envPathInRepo, Value: b.Spec.Path},
 			{Name: envImage, Value: buildImageRef(b)},
 			{Name: envCacheImage, Value: buildCacheRef(b)},
 			{Name: "METHOD", Value: string(method)},
-		},
+		}...),
 		SecurityContext: &corev1.SecurityContext{
 			// Privileged, and this is the concession the whole design turns on.
 			// buildkitd creates mount and network namespaces for each build
@@ -654,13 +738,13 @@ func buildkitSide(
 // lifecycleSide runs the buildpack phases, or reports what the container before
 // it already did.
 func lifecycleSide(b *platformv1alpha1.Build, limits corev1.ResourceRequirements) corev1.Container {
-	env := []corev1.EnvVar{
+	env := append(buildArgEnv(b), []corev1.EnvVar{
 		{Name: envImage, Value: buildImageRef(b)},
 		{Name: envCacheImage, Value: buildCacheRef(b)},
 		{Name: envPathInRepo, Value: b.Spec.Path},
 		{Name: "CNB_PLATFORM_API", Value: platformAPI},
 		{Name: envHome, Value: buildpackHome},
-	}
+	}...)
 	if host := insecureRegistry(b.Spec.Image); host != "" {
 		// The same concession the Dockerfile path already makes one line at a
 		// time with registry.insecure=true, in the lifecycle's spelling. The

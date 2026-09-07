@@ -1906,6 +1906,86 @@ jobs:
           kubectl -n damga delete pod pull-probe --wait=false
           kubectl -n damga-build delete build ci-build
 
+      # The flag ran; this is whether its reason ran.
+      #
+      # The step above proves a Dockerfile build produces a pullable image. It
+      # says nothing about build-time variables, which reach buildkit as
+      # --opt build-arg:NAME=VALUE — a flag that can be passed, accepted and
+      # have no effect if the value is composed rather than passed as one
+      # argument, or if the frontend never sees it.
+      #
+      # Its own fixture rather than app/: a probe in the product's Dockerfile is
+      # a probe that ships. test/buildarg builds in seconds and writes the value
+      # into the image, so reading it back is running the image — which proves
+      # the pull at the same time.
+      #
+      # The value carries a space and a quote on purpose. Those are the two
+      # characters that a value concatenated into a command line loses, and
+      # losing them produces a build that used half a value and said nothing.
+      #
+      # The buildpack path's own injection is a different mechanism — a file per
+      # variable under the platform directory — and is measured against the real
+      # lifecycle from the same builder image in
+      # internal/controller/build_env_test.go and by hand on 2026-09-05, rather
+      # than here: asserting it would mean a buildpack that reports its own
+      # environment, which is a fixture with more moving parts than the thing it
+      # checks.
+      - name: A build-time variable must reach the image
+        run: |
+          probe='a b "c" =d'
+          cat <<EOF | kubectl apply -f -
+          apiVersion: platform.damga.co/v1alpha1
+          kind: Build
+          metadata:
+            name: ci-buildarg
+            namespace: damga-build
+          spec:
+            repo: https://github.com/${{ github.repository }}.git
+            revision: ${{ github.sha }}
+            path: test/buildarg
+            image: ${REGISTRY_HOST}/ci/buildarg
+            builder: dockerfile
+            env:
+              - name: BUILD_PROBE
+                value: '${probe}'
+          EOF
+
+          for i in $(seq 1 60); do
+            phase=$(kubectl -n damga-build get build ci-buildarg -o jsonpath='{.status.phase}' 2>/dev/null || true)
+            [ "$phase" = Succeeded ] && break
+            if [ "$phase" = Failed ]; then
+              echo "::error::the build carrying a build-time variable failed:"
+              kubectl -n damga-build get build ci-buildarg -o jsonpath='{.status.message}'; echo
+              kubectl -n damga-build logs job/ci-buildarg --tail=60 || true
+              exit 1
+            fi
+            sleep 5
+          done
+          [ "$phase" = Succeeded ] || {
+            echo "::error::the build never finished; phase=$phase"
+            kubectl -n damga-build logs job/ci-buildarg --tail=60 || true
+            exit 1
+          }
+
+          digest=$(kubectl -n damga-build get build ci-buildarg -o jsonpath='{.status.digest}')
+          case "$digest" in sha256:*) ;; *) echo "::error::no digest recorded"; exit 1 ;; esac
+
+          # Running the image is the assertion: the file was written by the RUN
+          # step, so its contents are what buildkit substituted for the ARG.
+          kubectl -n damga-build run buildarg-probe --restart=Never --attach --rm -q \
+            --image="${REGISTRY_HOST}/ci/buildarg@${digest}" > /tmp/probe.out 2>/tmp/probe.err || {
+            echo "::error::the probe pod did not run"; cat /tmp/probe.err; exit 1; }
+
+          got=$(cat /tmp/probe.out)
+          if [ "$got" != "$probe" ]; then
+            echo "::error::the image was built with [$got] and the Build asked for [$probe]"
+            echo "::error::a build-time variable that arrives changed, or does not arrive at all,"
+            echo "::error::produces an image nobody can explain — see internal/controller/build_job.go"
+            exit 1
+          fi
+          echo "the build-time variable arrived intact: [$got]"
+          kubectl -n damga-build delete build ci-buildarg
+
       # The other half of the builder, which until now shipped green and had
       # never run. The step above uses builder: dockerfile, so every line of the
       # Cloud Native Buildpacks path — five lifecycle phases, a 1.2 GB builder

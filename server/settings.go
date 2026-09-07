@@ -71,17 +71,22 @@ const settingsSecretNote = "This value is not in git. Git carries the name and w
 	"\"who changed it and when\" for it, no rollback, and if the Secret is deleted nothing " +
 	"puts it back — unlike a manifest, which Argo CD restores in about ten seconds."
 
-// buildNotConsumedWarning is returned for every build-time variable, because
-// one is recorded and delivered nowhere.
+// buildTimeWarning is returned for every build-time variable, and it is not the
+// one that used to be here.
 //
-// Measured rather than assumed: BuildSpec carries repo, revision, path, image,
-// builder and resources, and no environment at all, and internal/controller's
-// build job injects none. A setting that is stored and does nothing is the
-// exact thing this endpoint exists to stop being invisible, so it says so in
-// the same breath as accepting it.
-const buildNotConsumedWarning = "build-time variables are recorded and nothing consumes them " +
-	"yet: a Build carries no environment, so the value reaches no build. It is kept so the " +
-	"setting survives until it does."
+// That one said the value was recorded and consumed by nothing, which was true
+// and measured: BuildSpec carried no environment at all. It does now, and both
+// injection paths were measured — buildkit takes --opt build-arg:, the
+// lifecycle takes a file per variable under the platform directory — so the
+// honest sentence is a different one.
+//
+// This is the thing somebody actually gets wrong next: setting a build-time
+// variable and looking at the running container for it. It reaches the build
+// that produces the image, and nothing about the container that is already
+// running changes until something builds and deploys.
+const buildTimeWarning = "a build-time variable reaches the next build of this app, not the " +
+	"container that is running now: it is given to the build that produces the image, so " +
+	"nothing changes until this app is built and deployed again."
 
 // envNamePattern is what envFrom will actually deliver.
 //
@@ -604,7 +609,7 @@ func planResources(r wireResources, current platformv1alpha1.Resources) (platfor
 func settingsWarnings(app platformv1alpha1.Workload) []string {
 	out := []string{}
 	if len(app.Spec.BuildEnv) > 0 {
-		out = append(out, buildNotConsumedWarning)
+		out = append(out, buildTimeWarning)
 	}
 	return out
 }

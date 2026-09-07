@@ -507,8 +507,12 @@ func TestABuildTimeVariableIsKeptAndDeclaredUnconsumed(t *testing.T) {
 		t.Errorf("a variable that is both build-time and run-time lost its run-time half: %v",
 			app.Spec.Env)
 	}
-	if !strings.Contains(body, "nothing consumes them") {
-		t.Errorf("the answer does not say the build never receives it:\n%s", body)
+	// The warning that used to be here said nothing consumed a build-time
+	// variable, which was true until BuildSpec grew an Env. What is left to
+	// warn about is the thing somebody gets wrong next: looking for it in the
+	// container that is already running.
+	if !strings.Contains(body, "not the container that is running now") {
+		t.Errorf("the answer does not say when a build-time variable takes effect:\n%s", body)
 	}
 
 	// One row, both boxes ticked. Two rows with the same name is a screen

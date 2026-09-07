@@ -30,6 +30,9 @@ import (
 
 	platformv1alpha1 "github.com/damgahq/damga/api/v1alpha1"
 	"github.com/damgahq/damga/authz"
+	"github.com/damgahq/damga/internal/gitwrite"
+	"github.com/damgahq/damga/internal/manifest"
+	"github.com/damgahq/damga/placement"
 )
 
 const (
@@ -133,6 +136,11 @@ type createBuildRequest struct {
 	// Image is where the result is pushed, without a tag. Empty means the
 	// platform's own registry under this tenant and app.
 	Image string `json:"image,omitempty"`
+
+	// Env names the environment whose build-time settings this build should
+	// use. Empty is the ordinary case and resolves on its own; see buildEnvFor
+	// for the two cases where it does not.
+	Env string `json:"env,omitempty"`
 }
 
 // createBuild asks the cluster to turn one commit into one image.
@@ -181,7 +189,15 @@ func createBuild(g guard, st stores) http.Handler {
 			problem(w, http.StatusBadRequest, "the request body is not the expected JSON")
 			return
 		}
-		build, err := buildFor(st.registry, ref.TenantID, ref.App, req)
+		vars, err := buildEnvFor(r.Context(), st, ref.TenantID, ref.App, req.Env)
+		if err != nil {
+			// A conflict rather than a bad request: nothing about the request is
+			// malformed, and what is wrong is a state the caller can resolve by
+			// naming an environment.
+			problem(w, http.StatusConflict, err.Error())
+			return
+		}
+		build, err := buildFor(st.registry, ref.TenantID, ref.App, vars, req)
 		if err != nil {
 			problem(w, http.StatusBadRequest, err.Error())
 			return
@@ -267,7 +283,9 @@ func credentialInURL(repo string) bool {
 	return false
 }
 
-func buildFor(registry, tenantID, app string, req createBuildRequest) (*platformv1alpha1.Build, error) {
+func buildFor(
+	registry, tenantID, app string, vars []platformv1alpha1.EnvVar, req createBuildRequest,
+) (*platformv1alpha1.Build, error) {
 	repo := strings.TrimSpace(req.Repo)
 	revision := strings.TrimSpace(req.Revision)
 	path := strings.TrimSpace(req.Path)
@@ -353,7 +371,135 @@ func buildFor(registry, tenantID, app string, req createBuildRequest) (*platform
 		},
 		Spec: platformv1alpha1.BuildSpec{
 			Repo: repo, Revision: revision, Path: path,
-			Image: image, Builder: method,
+			Image: image, Builder: method, Env: vars,
 		},
 	}, nil
+}
+
+// buildEnvFor answers which build-time variables this build runs with.
+//
+// They live on the app's committed manifest, one per environment, because that
+// is where the settings endpoint writes them. A build is not per environment —
+// it produces one image, tagged with the commit — so "which environment's
+// build settings" is a question this has to answer, and there are exactly three
+// answers:
+//
+//   - the caller named an environment: use that one. The webhook always does,
+//     because a push matches a trigger and a trigger belongs to a placement.
+//   - the app has one environment: use it, because there is nothing to choose
+//     between.
+//   - the app has several and the caller named none: use them if they agree,
+//     and refuse if they do not.
+//
+// That last refusal is not caution. The image reference a build pushes is the
+// repository plus the commit — buildImageRef — so two builds of one commit with
+// different build-time variables push to the same tag, and the second silently
+// replaces the first. An image that depends on settings the tag does not name
+// is an image nobody can reason about, and the honest answer is to make the
+// caller say which one they meant.
+//
+// A read per environment, from git, and only when there is more than one. The
+// settings live in the committed manifest and nowhere else — there is no second
+// copy in the database, which is what keeps the panel and the cluster from
+// drifting apart — so this is the cost of asking the state where the state is.
+func buildEnvFor(
+	ctx context.Context, st stores, tenantID, app, env string,
+) ([]platformv1alpha1.EnvVar, error) {
+	if st.writer == nil || st.gitAuth == nil {
+		// An install with no write path cannot read one either. Builds still
+		// run; they run without the variables, which is what they did before
+		// this existed.
+		return nil, nil
+	}
+
+	if env != "" {
+		place, err := st.placement.Get(ctx, tenantID, app, env)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"%s has no environment called %s, so there are no build settings to use",
+				app, env)
+		}
+		return committedBuildEnv(ctx, st, place)
+	}
+
+	places, err := st.placement.List(ctx, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("the app's environments could not be read")
+	}
+	mine := make([]placement.Placement, 0, 2)
+	for _, p := range places {
+		if p.App == app {
+			mine = append(mine, p)
+		}
+	}
+	if len(mine) == 0 {
+		return nil, nil
+	}
+
+	first, err := committedBuildEnv(ctx, st, mine[0])
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range mine[1:] {
+		next, err := committedBuildEnv(ctx, st, p)
+		if err != nil {
+			return nil, err
+		}
+		if !sameEnv(first, next) {
+			return nil, fmt.Errorf(
+				"%s builds one image for all of its environments, and %s and %s have "+
+					"different build-time variables. The image is tagged with the commit and "+
+					"not with the settings, so both builds would push to the same tag and the "+
+					"second would replace the first. Name the environment to build for, or "+
+					"make the two agree",
+				app, mine[0].Env, p.Env)
+		}
+	}
+	return first, nil
+}
+
+// committedBuildEnv reads one placement's build-time variables out of git.
+func committedBuildEnv(
+	ctx context.Context, st stores, place placement.Placement,
+) ([]platformv1alpha1.EnvVar, error) {
+	method, err := st.gitAuth.For(place.RepoURL)
+	if err != nil {
+		return nil, fmt.Errorf("the build settings could not be read: %s", err.Error())
+	}
+	files, err := st.writer.Read(ctx, gitwrite.Target{
+		RepoURL: place.RepoURL, Branch: place.Branch, Dir: place.Path, Auth: method,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("the state repository could not be read: %s", err.Error())
+	}
+	body, ok := files[manifest.File]
+	if !ok {
+		// Registered and never deployed: no manifest, therefore no settings.
+		// Not an error — a first build is exactly how an app stops being in
+		// that state.
+		return nil, nil
+	}
+	app, err := manifest.Parse(body)
+	if err != nil {
+		return nil, fmt.Errorf("the committed manifest cannot be read: %s", err.Error())
+	}
+	return app.Spec.BuildEnv, nil
+}
+
+// sameEnv compares two lists as settings rather than as slices: the same
+// variables with the same values, whatever order they are written in.
+func sameEnv(a, b []platformv1alpha1.EnvVar) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	values := make(map[string]string, len(a))
+	for _, e := range a {
+		values[e.Name] = e.Value
+	}
+	for _, e := range b {
+		if got, ok := values[e.Name]; !ok || got != e.Value {
+			return false
+		}
+	}
+	return true
 }

@@ -218,16 +218,20 @@ func (r *recorder) Find(q catalog.Query) []catalog.Entry {
 
 // callEnv drives a handler whose route names an environment, through a mux, so
 // the path values the guard reads are set the way the router sets them.
+// Always the home tenant, and the parameter for it is gone rather than passed
+// the same value at every call site: what a route does from another tenant is
+// TestEveryTenantRouteIsGuarded's subject, and it walks the whole table rather
+// than asking one helper.
 func (h *harness) callEnv(
 	handler func(guard, stores) http.Handler,
-	method, suffix, tenant, app, env, account, body string,
+	method, suffix, app, env, account, body string,
 ) (int, string) {
 	h.t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle(method+" "+tenantScope+suffix, handler(h.guard, h.stores))
 
 	target := strings.NewReplacer(
-		"{tenant}", tenant, "{app}", app, "{env}", env,
+		"{tenant}", tenantHome, "{app}", app, "{env}", env,
 	).Replace(tenantScope + suffix)
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
 	req.Host = testHost
@@ -245,7 +249,7 @@ func (h *harness) callEnv(
 func (h *harness) install(app, account, body string) (int, string) {
 	h.t.Helper()
 	return h.callEnv(installFromCatalog, http.MethodPost,
-		"/apps/{app}/envs/{env}/from-catalog", tenantHome, app, envProd, account, body)
+		"/apps/{app}/envs/{env}/from-catalog", app, envProd, account, body)
 }
 
 // The filter the user typed has to reach the catalogue. A handler that reads
@@ -303,7 +307,7 @@ func TestTheCatalogueListsWhatWasAskedFor(t *testing.T) {
 func TestNoCatalogueSaysSoRatherThanAnsweringAnEmptyList(t *testing.T) {
 	h := newHarness(t)
 	code, body := h.callEnv(catalogList, http.MethodGet, "/catalog",
-		tenantHome, "", "", accViewer, "")
+		"", "", accViewer, "")
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("GET /catalog with nothing mounted = %d: %s", code, body)
 	}
@@ -324,7 +328,7 @@ func TestAViewerMayReadTheCatalogueAndNotInstallFromIt(t *testing.T) {
 	h.stores.catalog = testCatalog(t)
 
 	if code, body := h.callEnv(catalogList, http.MethodGet, "/catalog",
-		tenantHome, "", "", accViewer, ""); code != http.StatusOK {
+		"", "", accViewer, ""); code != http.StatusOK {
 		t.Fatalf("a viewer could not read the catalogue: %d %s", code, body)
 	}
 

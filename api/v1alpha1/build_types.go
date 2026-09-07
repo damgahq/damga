@@ -93,6 +93,37 @@ type BuildSpec struct {
 	// +kubebuilder:default=detect
 	Builder BuildMethod `json:"builder,omitempty"`
 
+	// Env are build-time environment variables: values that choose what is
+	// compiled, not what the running container talks to.
+	//
+	// The two are separate lists on a Workload for the reason Coolify's
+	// is_buildtime and is_runtime are two booleans and not one: they have
+	// different lifetimes, and delivering either to the other is a real
+	// mistake — an API key baked into an image layer, or a compiler flag in a
+	// running container's environment. What reaches a Build is the build-time
+	// half of an app's settings, carried here by whoever asked for the build.
+	//
+	// Literal values only, and a build-time secret is refused rather than
+	// half-supported. Builds run in their own namespace; a Secret in the
+	// tenant's is not reachable from there, so the value would have to be
+	// copied into the build namespace by something that can read it, and
+	// nothing in this platform can read a secret. That is deliberate and it is
+	// what makes the settings endpoint's promise structural. A build-time
+	// secret is a separate change with a separate answer.
+	//
+	// Everything in this list is therefore as readable as the repository the
+	// manifest lives in — and as readable as this object, which shares a
+	// namespace with every other tenant's builds.
+	//
+	// A name envFrom would deliver, for the same reason the workload's user
+	// secrets are checked: a name that is not a legal environment variable is
+	// one the build silently does not receive.
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:XValidation:rule="self.all(e, e.name.matches('^[A-Za-z_][A-Za-z0-9_]*$'))",message="a build-time variable needs a name a shell can carry: a letter or underscore, then letters, digits and underscores"
+	Env []EnvVar `json:"env,omitempty"`
+
 	Resources Resources `json:"resources,omitempty"`
 }
 

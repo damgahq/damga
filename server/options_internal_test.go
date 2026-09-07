@@ -90,7 +90,7 @@ func TestAnEmptyRegistryFallsBackRatherThanComposingASlash(t *testing.T) {
 		t.Errorf("Registry = %q, want the default", o.Config.Registry)
 	}
 
-	build, err := buildFor(o.Config.Registry, tenantHome, appAPI, createBuildRequest{
+	build, err := buildFor(o.Config.Registry, tenantHome, appAPI, nil, createBuildRequest{
 		Repo: sourceRepo, Revision: testRevision,
 	})
 	if err != nil {

@@ -28,6 +28,14 @@ import (
 // EnvFrom instead.
 type EnvVar struct {
 	// +kubebuilder:validation:MinLength=1
+	// A ceiling, and it was put here by a measurement rather than by taste. A
+	// CEL rule that checks the names in a list costs the API server an estimate
+	// based on the longest string the schema allows, and with no maximum at all
+	// the rule on BuildSpec.Env was refused for exceeding the budget by 12.1x —
+	// taking the whole Build CRD with it, including rules that had been there
+	// for releases. 128 is far more than any environment variable name anybody
+	// writes and enough for the estimate to fit.
+	// +kubebuilder:validation:MaxLength=128
 	Name string `json:"name"`
 
 	Value string `json:"value,omitempty"`

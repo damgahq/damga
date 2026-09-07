@@ -239,7 +239,16 @@ func hooks(st stores) http.Handler {
 			// push that produced a Build this endpoint had assembled its own
 			// way would be a second definition of what a build is, and the two
 			// would drift on the first change to either.
-			build, err := buildFor(st.registry, t.TenantID, t.App, createBuildRequest{
+			// The environment is known here and is never guessed: a push
+			// matched this trigger, and a trigger belongs to one placement. So
+			// the build gets that environment's build-time variables rather
+			// than the ambiguity POST /builds has to resolve.
+			vars, err := buildEnvFor(r.Context(), st, t.TenantID, t.App, t.Env)
+			if err != nil {
+				problem(w, http.StatusConflict, err.Error())
+				return
+			}
+			build, err := buildFor(st.registry, t.TenantID, t.App, vars, createBuildRequest{
 				Repo: repo, Revision: event.After,
 			})
 			if err != nil {
