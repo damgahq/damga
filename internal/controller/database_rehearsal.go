@@ -44,6 +44,108 @@ type rehearsalResult struct {
 	SourceRows   int64  `json:"sourceRows"`
 	Restored     bool   `json:"restored"`
 	ArchiveBytes int64  `json:"archiveBytes"`
+
+	// Source is which copy the rehearsal read: "local", or the s3:// URL the
+	// archive was pulled back down from. Without it the page cannot tell a
+	// proof about the object in the bucket from a proof about the file on the
+	// disk that just died.
+	Source string `json:"source"`
+}
+
+// shipResult is what the ship container writes when it could not get the
+// archive off the cluster.
+//
+// Only when it failed. A container that succeeded says nothing here, because
+// the answer that matters then is the rehearsal's — and two containers both
+// writing a termination message would make which one the operator reads a
+// question of ordering.
+type shipResult struct {
+	FinishedAt string `json:"finishedAt"`
+	Shipped    bool   `json:"shipped"`
+
+	// Reason is one of credentials, bucket, network, disk or unknown, matched
+	// from the client's own words against strings it was measured producing.
+	Reason string `json:"reason"`
+
+	// Message quotes the client. A platform that replaces it with a sentence
+	// of its own is a platform nobody can debug against — and "the backup
+	// failed" is true of all five reasons.
+	Message string `json:"message"`
+}
+
+// latestShipFailure returns the most recent backup run that could not reach S3,
+// or nil when the most recent run reached it.
+//
+// Scanned the same way as the rehearsal and for the same reason: the message
+// lives in a container's terminated state. What it must not do is report an old
+// failure after a later run succeeded, so this returns the newest *run* rather
+// than the newest failure — a stale reason on the status is a page telling
+// somebody to go and fix something that has been working since.
+func (r *DatabaseReconciler) latestShipFailure(
+	ctx context.Context, db *platformv1alpha1.Database,
+) (*shipResult, error) {
+	var pods corev1.PodList
+	if err := r.List(ctx, &pods,
+		client.InNamespace(db.Namespace),
+		client.MatchingLabels{instanceLabel: db.Name, componentLabel: backupComponent},
+	); err != nil {
+		return nil, err
+	}
+
+	var newest *shipResult
+	var newestAt time.Time
+	for i := range pods.Items {
+		at, ok := runFinishedAt(&pods.Items[i])
+		if !ok || (newest != nil && !at.After(newestAt)) {
+			continue
+		}
+		newestAt, newest = at, shipFailureFromPod(&pods.Items[i])
+	}
+	return newest, nil
+}
+
+// runFinishedAt is when a backup pod stopped, from the pod rather than from
+// anything it wrote — a run that failed to ship may have written nothing the
+// operator can date.
+func runFinishedAt(pod *corev1.Pod) (time.Time, bool) {
+	var latest time.Time
+	for i := range pod.Status.ContainerStatuses {
+		if term := pod.Status.ContainerStatuses[i].State.Terminated; term != nil {
+			if term.FinishedAt.After(latest) {
+				latest = term.FinishedAt.Time
+			}
+		}
+	}
+	for i := range pod.Status.InitContainerStatuses {
+		if term := pod.Status.InitContainerStatuses[i].State.Terminated; term != nil {
+			if term.FinishedAt.After(latest) {
+				latest = term.FinishedAt.Time
+			}
+		}
+	}
+	return latest, !latest.IsZero()
+}
+
+// shipFailureFromPod pulls a ship failure out of one pod, or nil if that run
+// did not report one.
+func shipFailureFromPod(pod *corev1.Pod) *shipResult {
+	// Init containers, because that is where the ship step runs. Looking only
+	// at Containers is how this would silently always return nil.
+	for i := range pod.Status.InitContainerStatuses {
+		st := pod.Status.InitContainerStatuses[i]
+		if st.Name != shipContainer || st.State.Terminated == nil {
+			continue
+		}
+		var res shipResult
+		if err := json.Unmarshal([]byte(st.State.Terminated.Message), &res); err != nil {
+			return nil
+		}
+		if res.Shipped || res.Reason == "" {
+			return nil
+		}
+		return &res
+	}
+	return nil
 }
 
 // latestRehearsal reads the most recent backup run off the pods it left behind.
@@ -121,6 +223,7 @@ func rehearsalFromPod(pod *corev1.Pod) *platformv1alpha1.RestoreRehearsal {
 			Rows:       res.Rows,
 			Tables:     res.Tables,
 			SourceRows: res.SourceRows,
+			Source:     res.Source,
 		}
 	}
 	return nil

@@ -196,6 +196,19 @@ type DatabaseBackup struct {
 	// +kubebuilder:validation:XValidation:rule="quantity(self).isGreaterThan(quantity('0'))",message="storage must be greater than zero"
 	Storage resource.Quantity `json:"storage"`
 
+	// S3 copies each archive off the cluster, and is the difference between a
+	// backup and a backup that survives losing the node.
+	//
+	// Absent means the archives live only on the volume beside the database.
+	// That is a working configuration and a stated limit rather than a default
+	// nobody chose: one node's disk holds the data and the copy of the data, so
+	// the copy answers "somebody dropped a table" and does not answer "the node
+	// is gone".
+	//
+	// When it is set the rehearsal reads from here rather than from the local
+	// file — see RestoreRehearsal.Source for why that is the whole point.
+	S3 *S3Destination `json:"s3,omitempty"`
+
 	// Rehearse restores each backup into a throwaway instance and counts the
 	// rows, instead of only checking that the archive is readable.
 	//
@@ -206,6 +219,60 @@ type DatabaseBackup struct {
 	// which of the two claims an install is entitled to make.
 	// +kubebuilder:default=true
 	Rehearse *bool `json:"rehearse,omitempty"`
+}
+
+// S3Destination is a bucket archives are copied to.
+//
+// # Where the credential is not
+//
+// It is not in this struct, and that is the one decision here worth arguing
+// with. Everything else on a Database can be read with `kubectl get database -o
+// yaml` by anyone who may read the kind at all, and a key written here would be
+// readable by every one of them, printed by every `describe`, and committed to
+// git by the write path that renders this object. So this names a Secret and
+// the Secret holds the key.
+//
+// The same reason the control plane takes -git-token-file and -notify-url-file
+// rather than the values: a credential belongs somewhere with a rotation story,
+// and the place it must never be is anywhere that gets echoed back.
+type S3Destination struct {
+	// Bucket is where archives are written. It is not created: a platform that
+	// creates buckets needs permission to create buckets, and the credential
+	// this is given should be able to write objects and nothing else.
+	// +kubebuilder:validation:MinLength=1
+	Bucket string `json:"bucket"`
+
+	// Endpoint is the S3 service to talk to. Empty means AWS.
+	//
+	// Here because the product runs on one node in somebody's cupboard as
+	// often as in a region: MinIO, Garage, Ceph and Backblaze all speak S3 and
+	// none of them is s3.amazonaws.com. A URL rather than a host, because the
+	// scheme is the difference between a credential over TLS and one not.
+	// +kubebuilder:validation:XValidation:rule="self == '' || self.startsWith('https://') || self.startsWith('http://')",message="endpoint must be an http:// or https:// URL"
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// There is deliberately no region field. The client this renders discovers
+	// the region from the endpoint, and a field that is accepted and then not
+	// passed anywhere is worse than one that is missing: it reads as support.
+	// If an install turns up that needs one, it gets added with a test that
+	// proves it reached the request.
+
+	// Prefix is a directory inside the bucket. Empty writes at the root.
+	//
+	// Refused if it climbs: a prefix is a name this platform composes a key
+	// from, and one containing .. is a request to write somewhere else.
+	// +kubebuilder:validation:XValidation:rule="!self.startsWith('/') && !self.contains('..')",message="prefix must be relative and must not contain .."
+	Prefix string `json:"prefix,omitempty"`
+
+	// CredentialsSecret names a Secret in this namespace holding the two keys
+	// s3AccessKeyID and s3SecretAccessKey.
+	//
+	// Same namespace and nothing else, for the reason the Workload's database
+	// reference is: a Secret readable from another namespace is a tenant
+	// boundary with a hole in it.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$`
+	CredentialsSecret string `json:"credentialsSecret"`
 }
 
 // DatabaseStatus reports what the platform observed.
@@ -256,6 +323,18 @@ type RestoreRehearsal struct {
 	// a reader can see that everything came back rather than merely that
 	// something did.
 	SourceRows int64 `json:"sourceRows"`
+
+	// Source is where the archive that was restored came from: "local" for the
+	// volume beside the database, or the s3:// URL it was pulled back down
+	// from.
+	//
+	// The field exists because without it the product's claim quietly weakens
+	// the day archives start going to S3. Uploading and then rehearsing the
+	// local copy proves that the file on this disk restores — which is what was
+	// already proven — while the object anybody would actually reach for in a
+	// disaster has been proven of nothing. The two are indistinguishable on a
+	// page unless the page can say which one was read.
+	Source string `json:"source,omitempty"`
 }
 
 // DatabaseList contains a list of Database.

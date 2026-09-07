@@ -312,8 +312,83 @@ func (r *DatabaseReconciler) updateDatabaseStatus(
 		ready.Message = "the server is accepting connections"
 	}
 	setCondition(&db.Status.Conditions, ready)
+	setCondition(&db.Status.Conditions, r.offsiteCondition(ctx, db))
 
 	return r.Status().Update(ctx, db)
+}
+
+// offsiteCondition says whether the archives are leaving the cluster, which is
+// a different claim from Ready and from the rehearsal both.
+//
+// "A backup was taken" and "the backup reached somewhere the node's disk is not"
+// are two sentences, and folding them into one is how an install spends six
+// months believing it has offsite copies. So this reports the second one on its
+// own, and its reasons name what to go and fix: a credential, a bucket, a
+// network, a full disk.
+//
+// Absent S3 it is False with reason LocalOnly, and that is not a failure — it is
+// the configuration saying what it is. A Database with no destination has
+// archives in the same failure domain as its data, and the status says so
+// rather than staying quiet and letting the page imply otherwise.
+func (r *DatabaseReconciler) offsiteCondition(
+	ctx context.Context, db *platformv1alpha1.Database,
+) metav1.Condition {
+	c := metav1.Condition{
+		Type: offsiteCondition, ObservedGeneration: db.Generation,
+		LastTransitionTime: metav1.Now(), Status: metav1.ConditionFalse,
+	}
+	switch {
+	case db.Spec.Backup == nil:
+		c.Reason = "NoBackups"
+		c.Message = "this database is not backed up at all"
+		return c
+	case db.Spec.Backup.S3 == nil:
+		c.Reason = "LocalOnly"
+		c.Message = "archives are kept on a volume in this cluster, so they share a " +
+			"failure domain with the database; set backup.s3 to copy them off it"
+		return c
+	}
+
+	failed, err := r.latestShipFailure(ctx, db)
+	switch {
+	case err != nil:
+		// Reported rather than swallowed. Not being able to look and there
+		// being nothing wrong are different, and only one of them is fine.
+		c.Reason = "Unreadable"
+		c.Message = "the backup pods could not be read: " + err.Error()
+	case failed != nil:
+		// The client's own words, and a reason that names which of them it is.
+		c.Reason = shipReason(failed.Reason)
+		c.Message = failed.Message
+	case db.Status.LastRestore == nil:
+		c.Reason = "AwaitingBackup"
+		c.Message = "no backup has run yet"
+	default:
+		c.Status = metav1.ConditionTrue
+		c.Reason = "Shipped"
+		c.Message = "the most recent archive reached " + db.Spec.Backup.S3.Bucket
+	}
+	return c
+}
+
+// shipReason turns what the ship container reported into a condition reason.
+//
+// A fixed set, because a reason is what something else keys on — a page, an
+// alert, somebody's shell loop — and one that arrives straight from a shell
+// script is one a script change can rename without anything noticing.
+func shipReason(reported string) string {
+	switch reported {
+	case "credentials":
+		return "CredentialRefused"
+	case "bucket":
+		return "BucketUnavailable"
+	case "network":
+		return "EndpointUnreachable"
+	case "disk":
+		return "NoSpace"
+	default:
+		return "ShipFailed"
+	}
 }
 
 // SetupWithManager registers the reconciler.
