@@ -34,6 +34,7 @@ import (
 	"testing"
 
 	platformv1alpha1 "github.com/damgahq/damga/api/v1alpha1"
+	"github.com/damgahq/damga/internal/buildwatch"
 	"github.com/damgahq/damga/placement"
 	placementmem "github.com/damgahq/damga/placement/memory"
 )
@@ -516,5 +517,34 @@ func benchmarkVerify(b *testing.B, candidates []placement.Trigger) {
 		if got := verifyGitHub(body, sig, candidates); len(got) != 0 {
 			b.Fatal("a wrong secret verified")
 		}
+	}
+}
+
+// The joint: a build a push started has to say which environment it is for.
+//
+// A Build carries the tenant and the app, and nothing else in the cluster
+// knows which of an app's environments a repository push belongs to — the
+// trigger that matched is the only place the answer exists. Without this label
+// the chain completes as far as a digest and stops: buildwatch reads a
+// succeeded build, finds no environment, and correctly refuses to guess. Which
+// is the shape this whole change is closing, so it gets a case of its own.
+func TestAPushBuildsSomethingThatKnowsWhereToDeploy(t *testing.T) {
+	creator := &collectingCreator{}
+	h := hookEnv(t, creator)
+	body := pushBody("refs/heads/main", hookSHA)
+
+	if code, got := deliver(h, "push", signature(hookSecret, body), body); code != http.StatusAccepted {
+		t.Fatalf("a correctly signed push = %d: %s", code, got)
+	}
+	if len(creator.got) != 1 {
+		t.Fatalf("builds started = %d, want 1", len(creator.got))
+	}
+	got := creator.got[0].Labels[buildwatch.EnvLabel]
+	if got == "" {
+		t.Fatal("the build names no environment, so a digest it produces has nowhere to " +
+			"go: buildwatch reads a succeeded build, finds no environment, and stops")
+	}
+	if got != envProd {
+		t.Errorf("environment = %q, want the one the trigger resolved to (%q)", got, envProd)
 	}
 }

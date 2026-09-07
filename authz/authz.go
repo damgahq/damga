@@ -38,6 +38,7 @@ const (
 	ActionAppExec        Action = "app:exec"
 	ActionDatabaseCreate Action = "database:create"
 	ActionDatabaseDelete Action = "database:delete"
+	ActionAppTrigger     Action = "app:trigger"
 	ActionEnvCreate      Action = "env:create"
 	ActionEvidenceView   Action = "evidence:view"
 	ActionEvidenceExport Action = "evidence:export"

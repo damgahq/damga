@@ -20,6 +20,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -194,6 +195,15 @@ func createBuild(g guard, st stores) http.Handler {
 			return
 		}
 		switch err := st.builds.CreateBuild(r.Context(), build); {
+		// No cluster to build in. Kept apart from every refusal below, which
+		// are all things a cluster said: this one is the installation not
+		// having one, and it is the same 501 the nil seam used to give — the
+		// seam is no longer nil because it is now resolved lazily, so the case
+		// moved here rather than disappearing.
+		case errors.Is(err, errBuildsUnavailable):
+			problem(w, http.StatusNotImplemented,
+				"this installation cannot start builds: "+err.Error())
+			return
 		case isQuotaUncounted(err):
 			// The quota counts a type the API server has not been told about.
 			// Its own words name the quota and not the missing type, which is
@@ -348,7 +358,7 @@ func buildFor(registry, tenantID, app string, req createBuildRequest) (*platform
 				platformv1alpha1.BuildTenantLabel:   tenantID,
 				platformv1alpha1.BuildAppLabel:      app,
 				platformv1alpha1.BuildRevisionLabel: revision,
-				"app.kubernetes.io/managed-by":      "damga",
+				"app.kubernetes.io/managed-by":      managedByDamga,
 			},
 		},
 		Spec: platformv1alpha1.BuildSpec{

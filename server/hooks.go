@@ -23,10 +23,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/damgahq/damga/internal/buildwatch"
 	"github.com/damgahq/damga/placement"
 )
 
@@ -242,6 +244,19 @@ func hooks(st stores) http.Handler {
 			build, err := buildFor(st.registry, t.TenantID, t.App, createBuildRequest{
 				Repo: repo, Revision: event.After,
 			})
+			// Which environment this push is for, from the trigger that
+			// matched it. It is the only place the answer exists: a Build
+			// carries the tenant and the app, and nothing else knows which of
+			// an app's environments a repository push belongs to. Without it
+			// the build succeeds, produces a digest, and buildwatch has
+			// nowhere to send it — which is the state this whole change is
+			// closing.
+			if build != nil {
+				if build.Labels == nil {
+					build.Labels = map[string]string{}
+				}
+				build.Labels[buildwatch.EnvLabel] = t.Env
+			}
 			if err != nil {
 				// The payload verified, so this is the forge sending something
 				// this platform cannot build rather than anybody misbehaving —
@@ -262,6 +277,14 @@ func hooks(st stores) http.Handler {
 				return
 			}
 			if err := st.builds.CreateBuild(r.Context(), build); err != nil {
+				// The installation having no cluster is not the forge's fault
+				// and not a bad gateway. Same 501 the endpoint gives, so a
+				// push and a button report the same thing the same way.
+				if errors.Is(err, errBuildsUnavailable) {
+					problem(w, http.StatusNotImplemented,
+						"this installation cannot start builds: "+err.Error())
+					return
+				}
 				problem(w, http.StatusBadGateway, "the build could not be started: "+err.Error())
 				return
 			}

@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/damgahq/damga/auth"
@@ -358,6 +359,11 @@ var tenantRoutes = []struct {
 	// and what happens to the volume afterwards is not something this control
 	// plane can undo. See deleteDatabase.
 	{http.MethodDelete, "/apps/{app}/envs/{env}/databases/{database}", deleteDatabase},
+	// The first joint of `git push -> build -> deploy`, which had every part
+	// and no connection. placement.SetTrigger has existed and been implemented
+	// in all three stores for as long as the webhook handler has been reading
+	// TriggersFor; nothing wrote one, so every push matched nothing.
+	{http.MethodPut, "/apps/{app}/envs/{env}/trigger", setTrigger},
 }
 
 // handler builds the routes, then hands the mux to the Routes hook and wraps
@@ -540,6 +546,18 @@ func openStore(ctx context.Context, c Config, log *slog.Logger) (evidence.Store,
 }
 
 func (o Options) withDefaults() Options {
+	// The seam that was declared and never filled. Options.Builds says it is
+	// "filled by the composition root"; no composition root filled it, in any
+	// binary, so every build in every installation answered 501. Defaulted
+	// here rather than in cmd/, because that is where the other cluster-shaped
+	// defaults live and because a second binary would have had to remember.
+	//
+	// Lazy, so an installation with no cluster still starts and still says
+	// what it cannot do — the same shape logs and exec use.
+	if o.Builds == nil {
+		open := sync.OnceValues(inClusterBuilds)
+		o.Builds = lazyBuilds{open: open}
+	}
 	if o.Authorizer == nil {
 		o.Authorizer = authz.Authorizer(rbac.New())
 	}

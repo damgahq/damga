@@ -26,6 +26,7 @@ import (
 
 	platformv1alpha1 "github.com/damgahq/damga/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -33,7 +34,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/damgahq/damga/evidence"
+	"github.com/damgahq/damga/internal/buildwatch"
 	"github.com/damgahq/damga/internal/deploywatch"
+	"github.com/damgahq/damga/internal/gitwrite"
 )
 
 // managerGracePeriod is how long controller-runtime waits for its runnables.
@@ -54,7 +57,28 @@ func (o Options) runWithManager(
 	}
 
 	grace := managerGracePeriod
+	// The platform's own types, on the manager's scheme.
+	//
+	// deploywatch watches Deployments, which are in the default scheme, so
+	// nothing here had ever needed this. buildwatch watches a Build, and a
+	// manager whose scheme does not know the kind fails at startup rather than
+	// at the first object — measured on a real cluster on 2026-09-07:
+	//
+	//	damga stopped error="build observer: no kind is registered for the
+	//	type v1alpha1.Build in scheme"
+	//
+	// Which is the right failure and the wrong place to discover it: every
+	// unit test passes, because none of them builds a manager.
+	mgrScheme := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(mgrScheme); err != nil {
+		return fmt.Errorf("registering the core types: %w", err)
+	}
+	if err := platformv1alpha1.AddToScheme(mgrScheme); err != nil {
+		return fmt.Errorf("registering the platform types: %w", err)
+	}
+
 	mgr, err := ctrl.NewManager(restCfg, ctrl.Options{
+		Scheme: mgrScheme,
 		// The manager's own metrics endpoint is off. The panel's listener is
 		// the one this process is for, and a second one bound by default is how
 		// a port collision becomes a startup failure nobody asked for.
@@ -93,6 +117,32 @@ func (o Options) runWithManager(
 		Evidence: store,
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("deploy observer: %w", err)
+	}
+
+	// The third link of `git push -> build -> deploy`, and the one that was
+	// missing entirely: build_controller wrote a digest into a status field
+	// and nothing read it. This reads it and asks for a commit — it does not
+	// touch the cluster's desired state, because a build stands in front of
+	// the write path and not inside it.
+	//
+	// Registered only when there is somewhere to write. An installation with
+	// no git credential can still start, serve and build; what it cannot do is
+	// turn a build into a deploy, and a reconciler that failed on every
+	// succeeded build would say that once a minute for ever.
+	if o.Placement != nil && o.GitAuth != nil {
+		if err := (&buildwatch.Reconciler{
+			Client: mgr.GetClient(),
+			Deployer: buildDeployer{
+				places: o.Placement,
+				// The same writer the endpoints use, constructed the same way.
+				// It carries no state beyond the evidence store, so a second
+				// value is the same writer rather than a second one.
+				writer:  &gitwrite.Writer{Evidence: store},
+				gitAuth: o.GitAuth,
+			},
+		}).SetupWithManager(mgr); err != nil {
+			return fmt.Errorf("build observer: %w", err)
+		}
 	}
 
 	// A Runnable rather than a controller, because it is driven by a clock and

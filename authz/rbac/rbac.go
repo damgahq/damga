@@ -88,6 +88,15 @@ func (a *Authorizer) Authorize(
 		// no reason somebody who may create an app and ship to it may not also
 		// unregister one. A viewer still may not.
 		return authz.Decision{Allow: role != roleViewer, Reason: role + " may unregister an app"}, nil
+	case authz.ActionAppTrigger:
+		// Owner only, and it is the secret that decides this rather than the
+		// deploy. Connecting a repository hands out a key that lets whoever
+		// holds it make this platform build and ship code, from outside, with
+		// no session and no account — the webhook path authenticates the
+		// payload and not a person. That is a trust relationship rather than
+		// an action, and it is closer to choosing who may deploy than to
+		// deploying.
+		return authz.Decision{Allow: role == roleOwner, Reason: role + " may connect a repository"}, nil
 	case authz.ActionDatabaseCreate:
 		// The deploy right, and named here so the reasoning is on the record
 		// rather than inferred from the default. Creating a database commits a

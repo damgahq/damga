@@ -323,6 +323,7 @@ function appTabs(active) {
     { id: "overview", label: "Overview", go: showEvidence },
     { id: "settings", label: "Settings", go: showSettings },
     { id: "databases", label: "Databases", go: showDatabases },
+    { id: "source", label: "Source", go: showSource },
   ]) {
     if (tab.id === active) {
       const here = el("span", { class: "tab", "aria-current": "true" }, tab.label);
@@ -376,6 +377,41 @@ function showDatabases() {
     box,
   );
   mounted.push(mountDatabases(box, prefix));
+}
+
+// The source view. Raw Response for the reason the others need one: this page
+// prints the endpoint's refusal, so it has to see the body of a 400.
+function mountSource(el, prefix) {
+  return mountFrom("damgaSource", (m) => m.mountSource(el, prefix, {
+    fetcher: async (path, options = {}) => {
+      const res = await fetch(path, {
+        credentials: "same-origin",
+        ...options,
+        headers: { "Accept": "application/json", ...(options.headers || {}) },
+      });
+      if (res.status === 401) throw new NotSignedIn("not signed in");
+      return res;
+    },
+  }));
+}
+
+// Where `git push -> build -> deploy` begins, and the end of it being
+// unreachable from a browser.
+function showSource() {
+  const prefix = base();
+  stopMounted();
+  const { app, env } = state.ref;
+  const box = el("div", {});
+  render(
+    appTabs("source"),
+    el("h2", {}, `${app} · ${env}`),
+    el("p", { class: "sub muted" },
+      "Connect a repository. A push builds an image, and the digest it produces is " +
+      "committed as this environment's image — the build stands in front of the write " +
+      "path, not inside it."),
+    box,
+  );
+  mounted.push(mountSource(box, prefix));
 }
 
 // The exec view, and the one seam here that cannot use api().

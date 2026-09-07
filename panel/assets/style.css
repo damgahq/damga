@@ -311,3 +311,11 @@ a { color: var(--accent); }
 .db-cost[data-state="last"] { color: var(--fg); font-weight: 600; }
 .db-cost[data-state="over"] { color: var(--bad); font-weight: 600; }
 .db-cost[data-state="unknown"] { display: none; }
+
+/* The source view: where a push becomes a deploy. */
+.source-form { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .6rem 0 0; }
+.source-form input[type="text"] { flex: 1 1 16rem; min-width: 0; }
+/* Why the secret cannot be shown again — a sentence, so it gets a line of its
+ * own rather than being squeezed into a placeholder nobody reads. */
+.source-note { flex-basis: 100%; margin: .4rem 0 0; font-size: .75rem; color: var(--muted); }
+p[data-state="unconfigured"] { color: var(--bad); }

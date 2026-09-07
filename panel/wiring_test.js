@@ -33,6 +33,7 @@ const views = [
   { file: 'exec.js', global: 'damgaExec' },
   { file: 'settings.js', global: 'damgaSettings' },
   { file: 'databases.js', global: 'damgaDatabases' },
+  { file: 'source.js', global: 'damgaSource' },
 ];
 
 test('every view is loaded by the page, before the script that uses it', () => {
@@ -85,7 +86,8 @@ test('the page has rules for what the views draw', () => {
   const css = read('style.css');
   for (const selector of ['.logs', '.catalog-entry', '.refusal', '#catalog-list',
     '.exec-output', '.exec-form', '.settings-row', '.settings-warning', '.tabs',
-    '.db-row', '.db-credentials', '.db-form']) {
+    '.db-row', '.db-credentials', '.db-form',
+    '.source-form', '.source-note']) {
     // Terminated, not merely present. `.exec-outputX { }` contains the string
     // '.exec-output' and would report a rule that styles nothing on the page.
     assert.ok(new RegExp(`\\${selector}(?![\\w-])`).test(css),
@@ -232,4 +234,20 @@ test('the databases view is mounted and reachable', () => {
     'and not in the browser');
   assert.ok(/appTabs\(["']databases["']\)/.test(app),
     'the databases view does not draw the tab strip, so there is no way back from it');
+});
+
+test('the source view is mounted and reachable', () => {
+  const app = read('app.js');
+  assert.ok(/function mountSource\(/.test(app), 'app.js has no mountSource');
+  const calls = app.match(/(?<!function )(?<!m\.)mountSource\(/g) || [];
+  assert.ok(calls.length >= 1,
+    'mountSource is defined and never called: connecting a repository is reachable from ' +
+    'curl and from nowhere on the page, which is where this whole chain started');
+  assert.ok(/mounted\.push\([\s\S]*?mountSource/.test(app),
+    'mountSource is called but its stop function is not collected');
+  assert.ok(/function showSource\(/.test(app), 'app.js has no showSource');
+  const shown = app.match(/(?<!function )showSource\b/g) || [];
+  assert.ok(shown.length >= 1, 'showSource is defined and nothing navigates to it');
+  assert.ok(/appTabs\(["']source["']\)/.test(app),
+    'the source view does not draw the tab strip, so there is no way back from it');
 });
