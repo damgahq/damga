@@ -351,6 +351,100 @@ spec:
                   and nothing reads it: its only job is to differ from the last one.
                 maxLength: 64
                 type: string
+              schedules:
+                description: |-
+                  Schedules are commands this app runs on a timetable.
+
+                  A field of the workload and not a resource of its own, and the reason is
+                  the image. A scheduled task runs the application's code — the nightly
+                  job and the request handler are the same program — so the one thing that
+                  must never drift between them is which build they are. Held here, a
+                  deploy moves both in one commit and the operator's owner reference takes
+                  them away with the app. Held in a second object, a deploy would have to
+                  update two, and the failure when it did not is silent: last month's image
+                  running every night, with nothing anywhere saying so.
+
+                  That is what makes this different from Database and Build, which are
+                  resources. A Database outlives every deploy of the app in front of it and
+                  owns data that no commit can re-create. A Build is an action with a
+                  result. A schedule is neither: it is desired state that belongs to
+                  exactly one workload and changes with it.
+                items:
+                  description: |-
+                    Volume is one directory that outlives the pod.
+                    ScheduledTask is one command this app runs on a timetable.
+                  properties:
+                    command:
+                      description: |-
+                        Command is what to run, as argv.
+
+                        Required, with no default, and that refusal is the point. A CronJob with
+                        no command runs the image's entrypoint, and for an application that
+                        entrypoint is the server — so an app with a schedule and no command
+                        starts a second copy of itself every night, each one running for ever,
+                        until the namespace's quota stops it. Nothing about that reads as a
+                        misconfiguration from the outside.
+
+                        It is the same refusal server/exec.go makes about a container it cannot
+                        choose between: the platform will not guess what to run, because the
+                        wrong guess here is indistinguishable from working.
+                      items:
+                        type: string
+                      maxItems: 64
+                      minItems: 1
+                      type: array
+                    name:
+                      description: |-
+                        Name identifies the task within the workload. It becomes part of the
+                        CronJob's name, so it is a DNS label rather than free text.
+
+                        Bounded at 20 for arithmetic that is worth writing down. A CronJob's name
+                        may be no longer than 52 characters, because the controller appends 11 to
+                        build each Job's name and a Job's name may not exceed 63. This platform
+                        names the object `<workload>-<task>`, and a workload's own name may be a
+                        full 63-character label — so this bound alone cannot guarantee the sum
+                        fits. The operator checks the total and refuses with both halves and the
+                        limit; see cronJobName. What this bound does is make the common case fit
+                        without anybody having to know the arithmetic.
+                      maxLength: 20
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    schedule:
+                      description: |-
+                        Schedule is when to run it, in cron syntax: five fields, or one of the
+                        @-shorthands Kubernetes accepts.
+
+                        Validated for shape here and for meaning by the API server, which parses
+                        it. The pattern below refuses the things a person types by accident — an
+                        empty string, prose, six fields copied from a crontab that had a user
+                        column — so that the refusal is a sentence rather than a rejected
+                        CronJob nobody sees.
+                      maxLength: 100
+                      type: string
+                      x-kubernetes-validations:
+                      - message: a schedule is five space-separated cron fields, or
+                          an @-shorthand
+                        rule: self.startsWith('@') || self.split(' ').size() == 5
+                    suspend:
+                      description: |-
+                        Suspend stops the timetable without deleting it.
+
+                        A field rather than "remove it and add it back", because removing it is
+                        what deletes the record of what the schedule was. A task somebody is
+                        pausing while they work out why it fails is a task whose cron expression
+                        they will want back, and retyping it from memory is how a nightly job
+                        starts running hourly.
+                      type: boolean
+                  required:
+                  - command
+                  - name
+                  - schedule
+                  type: object
+                maxItems: 20
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               secrets:
                 description: |-
                   Secrets are values the platform has to invent, and the workload needs.
@@ -446,7 +540,6 @@ spec:
                   one. Without this field a catalogue is twenty applications, not a
                   catalogue.
                 items:
-                  description: Volume is one directory that outlives the pod.
                   properties:
                     name:
                       description: |-

@@ -28,6 +28,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -54,6 +55,59 @@ const (
 	// inline because CI's diagnostics and the hardening assertions both
 	// reach for containers[0] by this name.
 	containerName = "app"
+
+	// maxCronJobName is what Kubernetes allows a CronJob to be called.
+	//
+	// 52, and the arithmetic is worth carrying because nothing here can
+	// discover it: the CronJob controller appends 11 characters to build each
+	// Job's name, and a Job's name may not exceed 63. Kubernetes documents the
+	// sum. A CronJob created over the limit is refused by the API server, which
+	// is a rejection the operator has to turn into a sentence rather than let
+	// arrive as a failed apply nobody reads.
+	maxCronJobName = 52
+
+	// scheduledTaskLabel marks the CronJobs this workload owns, so the ones a
+	// removed schedule left behind can be found and deleted. The task's name
+	// and not the object's, because the object's name carries the workload's
+	// too and a label value may not be reconstructed by splitting on a
+	// separator that is legal inside both halves.
+	scheduledTaskLabel = annotationPrefix + "task"
+
+	// cronBackoffLimit is how many times one tick may retry. None.
+	//
+	// The default is 6, and it is wrong for this. A scheduled task's retry
+	// policy is its schedule: a job that runs hourly and fails is tried again
+	// in an hour, by the thing whose whole purpose is to try again. Six
+	// immediate retries turn one bad night into six identical failures two
+	// minutes apart and six pods to read through — and for the case this was
+	// built for, a migration, running it five more times after it exited
+	// non-zero is the outcome nobody wants.
+	//
+	// It is the other half of the rule the exec endpoint states: a non-zero
+	// exit is a result. A result is recorded, not retried.
+	cronBackoffLimit int32 = 0
+
+	// cronStartingDeadlineSecs bounds how late a missed tick may still run.
+	//
+	// Set rather than left nil, and the reason is a failure that is silent and
+	// permanent: with no deadline the controller counts every missed schedule
+	// since the last one that ran, and Kubernetes stops scheduling a CronJob
+	// that has missed more than a hundred. A control plane down for a weekend
+	// leaves a job that never runs again and reports nothing about why.
+	//
+	// Five minutes also answers the question the other way. A nightly job that
+	// the cluster could not start until six hours later is a job that runs in
+	// the middle of the working day, which for the batch this exists to run is
+	// worse than skipping.
+	cronStartingDeadlineSecs int64 = 300
+
+	// cronJobHistory is how many finished Jobs of each kind to keep.
+	//
+	// Three of each. The successful default is already three; the failed
+	// default is one, and one is the wrong number for the only case anybody
+	// opens this to look at — a job that has been failing for three nights is
+	// a job whose three nights you want to compare.
+	cronJobHistory int32 = 3
 
 	// The port the Service and the Ingress agree to call the application
 	// port, and the label whose second writer is Argo CD. Both are named
@@ -479,25 +533,16 @@ func desiredClaim(app *platformv1alpha1.Workload, v platformv1alpha1.Volume) *co
 	return claim
 }
 
-func desiredDeployment(app *platformv1alpha1.Workload) *appsv1.Deployment {
-	probe := func(path string) *corev1.Probe {
-		return &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: path,
-					Port: intstr.FromInt32(probePort(app)),
-				},
-			},
-			// Zero means the platform's own answer, so every manifest written
-			// before these fields existed renders exactly the bytes it did
-			// before — which is what keeps adding them from rolling every pod
-			// on the next reconcile.
-			PeriodSeconds:    orDefault(app.Spec.Health.IntervalSeconds, defaultProbePeriodSecs),
-			TimeoutSeconds:   orDefault(app.Spec.Health.TimeoutSeconds, defaultProbeTimeoutSecs),
-			FailureThreshold: orDefault(app.Spec.Health.FailureThreshold, defaultProbeFailures),
-		}
-	}
-
+// containerEnv is the environment every container this platform renders for an
+// app receives, in the order that decides who wins.
+//
+// One function and not two copies, because the Deployment and the CronJob run
+// the same program: a scheduled task that saw a different DATABASE_URL from the
+// request handler would be a bug nobody could find from either object alone.
+// This was inline in desiredDeployment until the CronJob needed it, and the
+// ordering below is the part that must not be re-derived — the comments are the
+// original ones and the decisions are unchanged.
+func containerEnv(app *platformv1alpha1.Workload) ([]corev1.EnvVar, []corev1.EnvFromSource) {
 	env := make([]corev1.EnvVar, 0, len(app.Spec.Env))
 	for _, e := range app.Spec.Env {
 		env = append(env, corev1.EnvVar{Name: e.Name, Value: e.Value})
@@ -550,6 +595,30 @@ func desiredDeployment(app *platformv1alpha1.Workload) *appsv1.Deployment {
 			},
 		})
 	}
+
+	return env, envFrom
+}
+
+func desiredDeployment(app *platformv1alpha1.Workload) *appsv1.Deployment {
+	probe := func(path string) *corev1.Probe {
+		return &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: path,
+					Port: intstr.FromInt32(probePort(app)),
+				},
+			},
+			// Zero means the platform's own answer, so every manifest written
+			// before these fields existed renders exactly the bytes it did
+			// before — which is what keeps adding them from rolling every pod
+			// on the next reconcile.
+			PeriodSeconds:    orDefault(app.Spec.Health.IntervalSeconds, defaultProbePeriodSecs),
+			TimeoutSeconds:   orDefault(app.Spec.Health.TimeoutSeconds, defaultProbeTimeoutSecs),
+			FailureThreshold: orDefault(app.Spec.Health.FailureThreshold, defaultProbeFailures),
+		}
+	}
+
+	env, envFrom := containerEnv(app)
 
 	replicas := app.Spec.Replicas
 	if app.Spec.Autoscale != nil {
@@ -678,6 +747,129 @@ func desiredDeployment(app *platformv1alpha1.Workload) *appsv1.Deployment {
 			},
 		},
 	}
+}
+
+// cronJobName is what one scheduled task's CronJob is called, or a refusal
+// naming both halves.
+//
+// The workload's name and the task's, joined. Both are DNS labels and either
+// may be long: a workload's name may be a full 63 characters, so a task name
+// this platform bounded at 20 is not on its own enough to keep the sum inside
+// what Kubernetes allows. Checked here rather than left to the API server,
+// because the API server's refusal arrives as a failed apply on an object
+// nobody is looking at, and what it says is that a name is too long — not
+// which two names were added together to make it.
+func cronJobName(app *platformv1alpha1.Workload, task string) (string, error) {
+	name := app.Name + "-" + task
+	if len(name) > maxCronJobName {
+		return "", fmt.Errorf(
+			"the CronJob for task %q would be called %q, which is %d characters; "+
+				"Kubernetes allows a CronJob %d, because it appends 11 to name each Job. "+
+				"Shorten the task name or the workload's",
+			task, name, len(name), maxCronJobName)
+	}
+	return name, nil
+}
+
+// desiredCronJob renders one scheduled task.
+//
+// The application's own image, its environment and its identity — the same
+// container the Deployment runs, with a command instead of a server. That is
+// the whole point of holding schedules on the workload: the nightly job and the
+// request handler are the same build, and containerEnv is shared so they cannot
+// disagree about what the database is called.
+//
+// What it deliberately does not carry from the Deployment: probes, ports, the
+// topology spread and the preStop sleep. A batch container answers no HTTP, is
+// not in a Service, and has nothing to drain — a readiness probe on it would
+// fail for ever and a liveness probe would kill a long migration at fifteen
+// seconds.
+func desiredCronJob(
+	app *platformv1alpha1.Workload, task platformv1alpha1.ScheduledTask,
+) (*batchv1.CronJob, error) {
+	name, err := cronJobName(app, task.Name)
+	if err != nil {
+		return nil, err
+	}
+	env, envFrom := containerEnv(app)
+
+	labels := labelsFor(app)
+	labels[scheduledTaskLabel] = task.Name
+
+	return &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   app.Namespace,
+			Labels:      labels,
+			Annotations: platformAnnotations(app),
+		},
+		Spec: batchv1.CronJobSpec{
+			Schedule: task.Schedule,
+			Suspend:  ptr.To(task.Suspend),
+			// Forbid, where Kubernetes defaults to Allow. The named case is a
+			// batch over the application's own data, and two copies of it
+			// writing the same rows is the failure a schedule invites: a run
+			// that takes longer than its interval overlaps itself, for ever,
+			// and each one makes the next one slower.
+			ConcurrencyPolicy:          batchv1.ForbidConcurrent,
+			StartingDeadlineSeconds:    ptr.To(cronStartingDeadlineSecs),
+			SuccessfulJobsHistoryLimit: ptr.To(cronJobHistory),
+			FailedJobsHistoryLimit:     ptr.To(cronJobHistory),
+			JobTemplate: batchv1.JobTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: labels},
+				Spec: batchv1.JobSpec{
+					BackoffLimit: ptr.To(cronBackoffLimit),
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: labels},
+						Spec: corev1.PodSpec{
+							// Never, not OnFailure. With BackoffLimit at zero
+							// the two differ in what is left behind: OnFailure
+							// restarts the container in the same pod and the
+							// previous attempt's log goes with it, and the
+							// whole reason to keep failed Jobs is to read it.
+							RestartPolicy:                corev1.RestartPolicyNever,
+							ServiceAccountName:           app.Name,
+							AutomountServiceAccountToken: ptr.To(false),
+							SecurityContext: &corev1.PodSecurityContext{
+								RunAsNonRoot:   ptr.To(true),
+								RunAsUser:      ptr.To(runAsUID),
+								RunAsGroup:     ptr.To(runAsGID),
+								FSGroup:        ptr.To(runAsGID),
+								SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+							},
+							Containers: []corev1.Container{{
+								Name:    containerName,
+								Image:   app.Spec.Image,
+								Command: task.Command,
+								Env:     env,
+								EnvFrom: envFrom,
+								Resources: corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{
+										corev1.ResourceCPU:    app.Spec.Resources.CPURequest,
+										corev1.ResourceMemory: app.Spec.Resources.MemoryRequest,
+									},
+									Limits: corev1.ResourceList{
+										corev1.ResourceMemory: app.Spec.Resources.MemoryLimit,
+									},
+								},
+								SecurityContext: &corev1.SecurityContext{
+									AllowPrivilegeEscalation: ptr.To(false),
+									ReadOnlyRootFilesystem:   ptr.To(true),
+									Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+								},
+								// The same mounts the Deployment gets,
+								// including the emptyDir at /tmp that a
+								// read-only root filesystem needs. A batch that
+								// writes a temp file is the ordinary case.
+								VolumeMounts: volumeMounts(app),
+							}},
+							Volumes: podVolumes(app),
+						},
+					},
+				},
+			},
+		},
+	}, nil
 }
 
 // startupProbe gives a slow container startupFailureBudget * startupPeriodSecs

@@ -25,6 +25,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -94,6 +95,7 @@ func (r *WorkloadReconciler) clusterIssuer() string {
 // +kubebuilder:rbac:groups=platform.damga.co,resources=workloads/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=platform.damga.co,resources=workloads/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies;ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
@@ -186,6 +188,84 @@ func (r *WorkloadReconciler) reconcileClaims(ctx context.Context, app *platformv
 	return nil
 }
 
+// reconcileScheduledTasks renders one CronJob per schedule and removes the ones
+// a deleted schedule left behind.
+//
+// A list rather than one object, which is why it cannot use deleteIfPresent:
+// that helper looks for an object named after the workload, and these are named
+// after the workload and the task. Finding what to remove therefore means
+// listing what is there — by the workload's own selector, so the search cannot
+// reach another app's — and deleting whatever carries a task label the spec no
+// longer names.
+//
+// Removed and not left, unlike a volume's claim. The asymmetry is deliberate
+// and it is about what is lost: a claim holds data that no commit can
+// re-create, so it outlives the workload on purpose. A CronJob holds nothing. A
+// schedule taken out of the manifest and still firing every night is the
+// failure this platform would be judged by, and it is invisible — the app looks
+// right, the manifest looks right, and something keeps running.
+func (r *WorkloadReconciler) reconcileScheduledTasks(
+	ctx context.Context, app *platformv1alpha1.Workload,
+) error {
+	wanted := make(map[string]bool, len(app.Spec.Schedules))
+	for i := range app.Spec.Schedules {
+		task := app.Spec.Schedules[i]
+		want, err := desiredCronJob(app, task)
+		if err != nil {
+			// The name is too long to be a CronJob. Reported as a render
+			// failure with both halves named, rather than pushed at the API
+			// server so it can answer that a name is too long without saying
+			// which two were added together.
+			return err
+		}
+		wanted[task.Name] = true
+
+		if err := r.apply(ctx, app, want, func(existing, desired client.Object) {
+			e := existing.(*batchv1.CronJob)
+			d := desired.(*batchv1.CronJob)
+			// The whole spec, including Suspend. A CronJob suspended by hand is
+			// reverted on the next pass, and that is the write path working
+			// rather than a bug: the manifest carries a suspend field so that
+			// pausing a task is a commit somebody can see, and honouring a
+			// kubectl patch instead would make the committed state a
+			// suggestion.
+			e.Spec = d.Spec
+			e.Labels = reconcileLabels(e.Labels, d.Labels)
+			e.Annotations = reconcileAnnotations(e.Annotations, d.Annotations)
+		}); err != nil {
+			return fmt.Errorf("scheduled task %s: %w", task.Name, err)
+		}
+	}
+
+	var have batchv1.CronJobList
+	if err := r.List(ctx, &have,
+		client.InNamespace(app.Namespace),
+		client.MatchingLabels(selectorFor(app)),
+	); err != nil {
+		return fmt.Errorf("listing scheduled tasks: %w", err)
+	}
+	for i := range have.Items {
+		job := &have.Items[i]
+		task := job.Labels[scheduledTaskLabel]
+		switch {
+		case task == "" || wanted[task]:
+			continue
+		case !metav1.IsControlledBy(job, app):
+			// The same rule apply enforces on the way in. An object this
+			// workload does not own is one somebody else made, and a selector
+			// that happens to match it is not a licence to delete it.
+			log.FromContext(ctx).Info(
+				"leaving a CronJob alone because this workload does not own it",
+				"name", job.Name)
+			continue
+		}
+		if err := r.Delete(ctx, job); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("removing scheduled task %s: %w", task, err)
+		}
+	}
+	return nil
+}
+
 // reconcileGeneratedSecret mints what the workload asked for, once.
 //
 // Read before write, and that read is the whole mechanism: desiredGeneratedSecret
@@ -244,6 +324,10 @@ func (r *WorkloadReconciler) reconcileOwned(ctx context.Context, app *platformv1
 
 	// Before the Deployment, which mounts it. A pod that names a Secret which
 	// does not exist stays Pending, and the Deployment says nothing about why.
+	if err := r.reconcileScheduledTasks(ctx, app); err != nil {
+		return err
+	}
+
 	if err := r.reconcileGeneratedSecret(ctx, app); err != nil {
 		return err
 	}
@@ -660,6 +744,7 @@ func (r *WorkloadReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&networkingv1.Ingress{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
+		Owns(&batchv1.CronJob{}).
 		Named("workload").
 		Complete(r)
 }

@@ -317,6 +317,28 @@ type WorkloadSpec struct {
 	//
 	// Refused together with volumes; see the rule on WorkloadSpec.
 	Autoscale *Autoscale `json:"autoscale,omitempty"`
+
+	// Schedules are commands this app runs on a timetable.
+	//
+	// A field of the workload and not a resource of its own, and the reason is
+	// the image. A scheduled task runs the application's code — the nightly
+	// job and the request handler are the same program — so the one thing that
+	// must never drift between them is which build they are. Held here, a
+	// deploy moves both in one commit and the operator's owner reference takes
+	// them away with the app. Held in a second object, a deploy would have to
+	// update two, and the failure when it did not is silent: last month's image
+	// running every night, with nothing anywhere saying so.
+	//
+	// That is what makes this different from Database and Build, which are
+	// resources. A Database outlives every deploy of the app in front of it and
+	// owns data that no commit can re-create. A Build is an action with a
+	// result. A schedule is neither: it is desired state that belongs to
+	// exactly one workload and changes with it.
+	//
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=20
+	Schedules []ScheduledTask `json:"schedules,omitempty"`
 }
 
 // GeneratedSecret is one value the platform invents once and then keeps.
@@ -365,6 +387,61 @@ const (
 )
 
 // Volume is one directory that outlives the pod.
+// ScheduledTask is one command this app runs on a timetable.
+type ScheduledTask struct {
+	// Name identifies the task within the workload. It becomes part of the
+	// CronJob's name, so it is a DNS label rather than free text.
+	//
+	// Bounded at 20 for arithmetic that is worth writing down. A CronJob's name
+	// may be no longer than 52 characters, because the controller appends 11 to
+	// build each Job's name and a Job's name may not exceed 63. This platform
+	// names the object `<workload>-<task>`, and a workload's own name may be a
+	// full 63-character label — so this bound alone cannot guarantee the sum
+	// fits. The operator checks the total and refuses with both halves and the
+	// limit; see cronJobName. What this bound does is make the common case fit
+	// without anybody having to know the arithmetic.
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=20
+	Name string `json:"name"`
+
+	// Schedule is when to run it, in cron syntax: five fields, or one of the
+	// @-shorthands Kubernetes accepts.
+	//
+	// Validated for shape here and for meaning by the API server, which parses
+	// it. The pattern below refuses the things a person types by accident — an
+	// empty string, prose, six fields copied from a crontab that had a user
+	// column — so that the refusal is a sentence rather than a rejected
+	// CronJob nobody sees.
+	// +kubebuilder:validation:MaxLength=100
+	// +kubebuilder:validation:XValidation:rule="self.startsWith('@') || self.split(' ').size() == 5",message="a schedule is five space-separated cron fields, or an @-shorthand"
+	Schedule string `json:"schedule"`
+
+	// Command is what to run, as argv.
+	//
+	// Required, with no default, and that refusal is the point. A CronJob with
+	// no command runs the image's entrypoint, and for an application that
+	// entrypoint is the server — so an app with a schedule and no command
+	// starts a second copy of itself every night, each one running for ever,
+	// until the namespace's quota stops it. Nothing about that reads as a
+	// misconfiguration from the outside.
+	//
+	// It is the same refusal server/exec.go makes about a container it cannot
+	// choose between: the platform will not guess what to run, because the
+	// wrong guess here is indistinguishable from working.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=64
+	Command []string `json:"command"`
+
+	// Suspend stops the timetable without deleting it.
+	//
+	// A field rather than "remove it and add it back", because removing it is
+	// what deletes the record of what the schedule was. A task somebody is
+	// pausing while they work out why it fails is a task whose cron expression
+	// they will want back, and retyping it from memory is how a nightly job
+	// starts running hourly.
+	Suspend bool `json:"suspend,omitempty"`
+}
+
 type Volume struct {
 	// Name identifies the claim within the workload. It becomes part of the
 	// PersistentVolumeClaim's name, so it is a DNS label rather than free text.
