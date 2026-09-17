@@ -49,7 +49,7 @@ test('a secret is never rendered, and says so rather than looking unset', () => 
   const view = envRowView({ secret: true });
   assert.strictEqual(view.shown, false,
     'the panel would render a secret value, which makes this page the one place it is readable');
-  assert.match(view.text, /not shown/);
+  assert.match(view.text, /gösterilmiyor/);
   assert.notStrictEqual(view.text, envRowView({}).text,
     'a secret reads the same as a variable with no value; one is set and one is not');
 });
@@ -73,10 +73,10 @@ test('a secret carries the server sentence about what it costs', () => {
   // And when the endpoint sent none — an older control plane — it still says
   // the two things that matter rather than nothing.
   const fallback = envRowView({ secret: true });
-  assert.match(fallback.warning, /not in git/i);
-  assert.match(fallback.warning, /roll(ed)? back/i,
+  assert.match(fallback.warning, /git'te değil/i);
+  assert.match(fallback.warning, /geri alınamaz/i,
     'the fallback does not say the value cannot be rolled back');
-  assert.match(fallback.warning, /deleted|puts it back/i,
+  assert.match(fallback.warning, /silinirse|geri koymaz/i,
     'the fallback does not say that nothing restores it if the Secret is deleted');
 
   // No literal carries it, or the sentence stops meaning anything.
@@ -122,10 +122,10 @@ test('a removed variable is simply not in the body', () => {
 
 // Two booleans, not one choice.
 test('build and runtime are independent, and applying nowhere is named', () => {
-  assert.strictEqual(scopeText({ build: true, runtime: true }), 'build and runtime');
-  assert.strictEqual(scopeText({ build: true, runtime: false }), 'build only');
-  assert.strictEqual(scopeText({ build: false, runtime: true }), 'runtime only');
-  assert.match(scopeText({ build: false, runtime: false }), /not applied anywhere/,
+  assert.strictEqual(scopeText({ build: true, runtime: true }), 'derleme ve çalışma zamanı');
+  assert.strictEqual(scopeText({ build: true, runtime: false }), 'yalnızca derleme');
+  assert.strictEqual(scopeText({ build: false, runtime: true }), 'yalnızca çalışma zamanı');
+  assert.match(scopeText({ build: false, runtime: false }), /hiçbir yere uygulanmıyor/,
     'a variable that applies at neither build nor runtime is drawn as though it were fine; ' +
     'it is set and does nothing');
 
@@ -150,7 +150,7 @@ test('a refusal is printed as the server phrased it', () => {
     'a secret with an empty value is not a secret');
   assert.strictEqual(refusalText(400, { detail: 'PORT is set both as a literal and as a secret' }),
     'PORT is set both as a literal and as a secret');
-  assert.match(refusalText(403, null), /not permitted/);
+  assert.match(refusalText(403, null), /ayarları değiştirme izni yok/);
   assert.match(refusalText(499, null), /499/,
     'an unexpected status is reported with its number rather than as a generic failure');
 });
@@ -163,10 +163,10 @@ test('a refusal is printed as the server phrased it', () => {
 // change really happened, so "saved" alone is useless and "committed" is a
 // lie. It has to say which.
 test('a save says whether anything was committed', () => {
-  assert.match(savedText({ record: { commit: 'abcdef1234567' } }), /committed abcdef1/);
+  assert.match(savedText({ record: { commit: 'abcdef1234567' } }), /abcdef1 olarak commit edildi/);
 
   const secretsOnly = savedText({ record: null });
-  assert.match(secretsOnly, /nothing was committed/,
+  assert.match(secretsOnly, /hiçbir şey commit edilmedi/,
     'a save that wrote only secret values claims a commit that does not exist');
   assert.match(secretsOnly, /git/,
     'it does not say why there is no commit, which is the one thing that makes this ' +

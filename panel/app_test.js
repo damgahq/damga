@@ -131,12 +131,12 @@ test('a restored backup says when and how many out of how many', () => {
     database: 'shop-db', state: 'restored',
     finishedAt: '2026-08-29T02:04:11Z', rows: 1284, sourceRows: 1284, tables: 7,
   });
-  assert.match(v.lastRun.text, /restored/);
+  assert.match(v.lastRun.text, /geri yüklendi/);
   assert.strictEqual(v.lastRun.ok, true);
   // Against the source, not alone. "1,284 came back" and "1,284 came back out
   // of 1,284" are different claims and only the second was measured.
-  assert.match(v.verified.text, /1284 of 1284/);
-  assert.match(v.verified.text, /7 tables/);
+  assert.match(v.verified.text, /1284 satırın 1284 tanesi/);
+  assert.match(v.verified.text, /7 tablo/);
 });
 
 test('an archive nothing restored is not called restored', () => {
@@ -146,13 +146,13 @@ test('an archive nothing restored is not called restored', () => {
   assert.doesNotMatch(v.lastRun.text, /restored/,
     'a backup nobody restored was reported as restored, which is the claim the ' +
     'whole rehearsal exists to make honestly');
-  assert.match(v.verified.text, /not restored/);
+  assert.match(v.verified.text, /geri yüklenmedi/);
   assert.strictEqual(v.lastRun.ok, false);
 });
 
 test('a database whose first backup has not run says exactly that', () => {
   const v = backupView({ database: 'shop-db', state: 'none yet' });
-  assert.match(v.lastRun.text, /no backup has run yet/);
+  assert.match(v.lastRun.text, /henüz hiçbir yedek çalışmadı/);
   assert.strictEqual(v.lastRun.ok, null, 'a run that has not happened was given a verdict');
   // And no count, because there is nothing to count. A zero here reads as a
   // restore that produced nothing.
@@ -164,7 +164,7 @@ test('one table is a table', () => {
     database: 'db', state: 'restored', finishedAt: '2026-08-29T02:00:00Z',
     rows: 3, sourceRows: 3, tables: 1,
   });
-  assert.match(v.verified.text, /1 table\b/);
+  assert.match(v.verified.text, /1 tablo\b/);
 });
 
 // --- adding an application --------------------------------------------------
@@ -218,8 +218,8 @@ test('the delivery line is quoted word for word, including the half that is miss
 
 test('a created app does not claim anything is running', () => {
   const got = newAppOutcome(201, { app: { app: 'api', env: 'prod' }, delivery: 'watching' });
-  assert.match(got.text, /registered/);
-  assert.match(got.hint, /Nothing is deployed by this/);
+  assert.match(got.text, /kaydedildi/);
+  assert.match(got.hint, /Bu hiçbir şey deploy etmez/);
 });
 
 test('a refusal is the server\'s sentence and not the page\'s', () => {

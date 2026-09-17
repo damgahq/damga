@@ -27,17 +27,17 @@ test('the credentials say where they are and what that costs', () => {
   assert.strictEqual(view.shown, false,
     'the panel would render a database password');
   assert.strictEqual(view.inGit, false);
-  assert.match(view.text, /Secret main/);
-  assert.match(view.warning, /not in git/i);
-  assert.match(view.warning, /rollback/i,
+  assert.match(view.text, /main Secret/);
+  assert.match(view.warning, /git'te değil/i);
+  assert.match(view.warning, /geri dönüş yoktur/i,
     'the warning does not say there is no rollback to a value git never held');
-  assert.match(view.warning, /deleted|puts it back/i,
+  assert.match(view.warning, /silinirse|geri koymaz/i,
     'the warning does not say that nothing restores the Secret if it is deleted — the ' +
     'drift case measured on 2026-09-02');
 
   // Even with nothing to name, it must not read as "there is no password".
   const bare = credentialsView({});
-  assert.match(bare.text, /does not read/);
+  assert.match(bare.text, /bu sayfanın okumadığı/);
   assert.strictEqual(bare.warning, CREDENTIALS_NOTE);
 });
 
@@ -51,7 +51,7 @@ test('the volume budget is three screens, not a number', () => {
   assert.deepStrictEqual([room.state, last.state, over.state], ['room', 'last', 'over']);
   assert.strictEqual(new Set([room.text, last.text, over.text]).size, 3,
     'two of the three say the same sentence');
-  assert.match(last.text, /last/,
+  assert.match(last.text, /sonuncusunu/,
     'taking the final claim reads the same as taking any other, so nobody is warned ' +
     'before the one that fills the namespace');
 
@@ -88,7 +88,7 @@ test('a refusal is printed as the server phrased it', () => {
   assert.strictEqual(
     refusalText(400, { detail: 'the image "postgres" carries no tag or digest' }),
     'the image "postgres" carries no tag or digest');
-  assert.match(refusalText(403, null), /owner/);
+  assert.match(refusalText(403, null), /yalnızca sahibe/);
   assert.match(refusalText(418, null), /418/);
 });
 
@@ -101,7 +101,7 @@ test('a removal prints the server sentence about the data', () => {
 
   // And with no note, it still does not say the data is gone.
   const fallback = removedText({});
-  assert.match(fallback, /not deleted/,
+  assert.match(fallback, /silinmez/,
     'a removal with no note from the server reads as though the data went with it');
 });
 

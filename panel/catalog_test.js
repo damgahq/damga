@@ -131,11 +131,11 @@ test('a successful install says committed, and says nothing is running yet', () 
     deploy: { seq: 4, state: 'pending' },
   });
   assert.strictEqual(out.ok, true);
-  assert.match(out.text, /committed/);
+  assert.match(out.text, /commit edildi/);
   assert.doesNotMatch(out.text, /running/,
     'the headline must not claim the thing that has not happened');
   assert.match(out.note, /pending/, 'the deploy state is the API\'s answer and is quoted');
-  assert.match(out.note, /Nothing is running/);
+  assert.match(out.note, /çalışan bir şey olmaz/);
   assert.match(out.note, /notes/, 'the reader is told where to watch it');
 });
 
@@ -152,7 +152,7 @@ test('a refused install lists every reason the endpoint gave', () => {
 test('a name already taken is not reported as a broken install', () => {
   const out = installOutcome(409, { detail: 'this app and environment already exist' });
   assert.strictEqual(out.ok, false);
-  assert.match(out.text, /already/);
+  assert.match(out.text, /zaten/);
   assert.strictEqual(out.note, 'this app and environment already exist');
 });
 

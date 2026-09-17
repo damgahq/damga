@@ -79,7 +79,7 @@ test('Running and not Ready is not reported as healthy', () => {
 
   const notReady = statusView(pod({ ready: false }));
   assert.strictEqual(notReady.ok, false, 'a replica serving nothing was shown as fine');
-  assert.match(notReady.text, /not ready/);
+  assert.match(notReady.text, /hazır değil/);
 });
 
 test('a replica that is not Running says which phase it is in', () => {
@@ -91,22 +91,22 @@ test('a replica that is not Running says which phase it is in', () => {
 // A count says something is wrong; the reason says what. OOMKilled and exit 1
 // send the reader to two different places.
 test('restarts carry the reason the last container ended', () => {
-  assert.deepStrictEqual(restartView(pod({ restarts: 0 })), { text: 'none', ok: true });
+  assert.deepStrictEqual(restartView(pod({ restarts: 0 })), { text: 'yok', ok: true });
 
   const oom = restartView(pod({ restarts: 7, lastTerminated: { reason: 'OOMKilled', exitCode: 137 } }));
   assert.strictEqual(oom.ok, false);
-  assert.match(oom.text, /7 restarts/);
+  assert.match(oom.text, /7 yeniden başlatma/);
   assert.match(oom.text, /OOMKilled/, 'the count without the reason is the half nobody can act on');
   assert.match(oom.text, /137/);
 
   // A restart with nothing recorded about it still has to say the count.
   const bare = restartView(pod({ restarts: 2 }));
-  assert.strictEqual(bare.text, '2 restarts');
+  assert.strictEqual(bare.text, '2 yeniden başlatma');
   assert.strictEqual(bare.ok, false);
 
   // Singular, because "1 restarts" is the kind of thing that makes a reader
   // wonder what else was not looked at.
-  assert.match(restartView(pod({ restarts: 1 })).text, /^1 restart\b/);
+  assert.match(restartView(pod({ restarts: 1 })).text, /^1 yeniden başlatma\b/);
 });
 
 // ------------------------------------------------------------ the numbers
@@ -126,7 +126,7 @@ test('the percentage is the one the server sent', () => {
 });
 
 test('a pod with no sample says so rather than showing a zero', () => {
-  assert.strictEqual(sampleText({ request: '128Mi', limit: '512Mi' }, { columns: true }), 'no sample yet');
+  assert.strictEqual(sampleText({ request: '128Mi', limit: '512Mi' }, { columns: true }), 'henüz örnek yok');
   assert.strictEqual(sampleText(undefined, { columns: true }), '—');
 });
 
@@ -155,7 +155,7 @@ test('the rows carry one line per replica, whatever the usage state', () => {
   // The pod facts survive the usage being absent, which is the whole reason the
   // endpoint reads two sources that fail apart.
   assert.strictEqual(rows[1].status.ok, true);
-  assert.strictEqual(rows[0].memory, 'no sample yet');
+  assert.strictEqual(rows[0].memory, 'henüz örnek yok');
 });
 
 test('an app with no replicas is not an error', () => {

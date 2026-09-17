@@ -56,13 +56,13 @@ test('a command that exits non-zero ran, and does not read as a refusal', () => 
   assert.strictEqual(one.state, 'exited',
     'a command that exited 1 is drawn as a refusal; it ran, and it printed why');
   assert.strictEqual(one.ran, true);
-  assert.match(one.text, /exited 1/);
+  assert.match(one.text, /1 ile çıktı/);
   assert.doesNotMatch(one.text, /could not|failed to run|unable/i,
     'the text says the command could not be run, and it was: it ran and returned 1');
 
   const zero = execView({ phase: 'exited', code: 0 });
   assert.strictEqual(zero.ok, true);
-  assert.match(zero.text, /exited 0/);
+  assert.match(zero.text, /0 ile çıktı/);
 
   // The two states are different states, not one state with a different colour.
   assert.notStrictEqual(one.state, execView({ phase: 'refused', detail: 'x' }).state);
@@ -80,8 +80,8 @@ test('a broken stream never reads as a command that printed nothing', () => {
   assert.strictEqual(lost.ran, true,
     'a lost stream is drawn as though nothing ran; the request was accepted, so ' +
     'something did');
-  assert.match(lost.text, /connection broke/i);
-  assert.match(lost.text, /may have finished|output stops here/i,
+  assert.match(lost.text, /bağlantı koptu/i);
+  assert.match(lost.text, /Bitmiş olabilir|çıktısı burada kesiliyor/i,
     'the message does not say the command may have run, which is the only thing the ' +
     'reader needs from this state');
 
@@ -114,8 +114,8 @@ test('every state this view can be in is a different screen', () => {
 test('a refusal before the stream prints the detail the server sent', () => {
   assert.strictEqual(
     refusalText(403, { detail: 'no access to this tenant' }), 'no access to this tenant');
-  assert.match(refusalText(501, {}), /cannot run commands/);
-  assert.match(refusalText(403, {}), /owner/);
+  assert.match(refusalText(501, {}), /komut çalıştıramıyor/);
+  assert.match(refusalText(403, {}), /yalnızca sahibe/);
   assert.match(refusalText(418, null), /418/,
     'an unexpected status is reported with its number rather than as a generic failure');
 });
@@ -130,7 +130,7 @@ test('what somebody typed becomes the argv the endpoint takes', () => {
   assert.deepStrictEqual(parseCommand('psql -c ""'), ['psql', '-c', '']);
   assert.deepStrictEqual(parseCommand(''), []);
 
-  assert.throws(() => parseCommand('psql -c "select 1'), /unclosed " quote/,
+  assert.throws(() => parseCommand('psql -c "select 1'), /kapatılmamış bir " tırnağı/,
     'an unbalanced quote was closed silently, which runs a command nobody wrote');
 });
 
