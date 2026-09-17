@@ -43,6 +43,21 @@ const (
 	// live in the database's own image, and an S3 client does not.
 	shipContainer     = "ship"
 	rehearseContainer = "rehearse"
+
+	// The two names the volumes carry and the path the dump is read back
+	// from. Spelled once because three places have to agree: the container
+	// that writes the dump, the one that ships it, and the one that restores
+	// it. A mount path that disagrees between them is a container that runs,
+	// finds an empty directory, and reports success over nothing.
+	backupVolume    = "backup"
+	rehearsalVolume = "rehearsal"
+	backupMountPath = "/backup"
+
+	// The credentials as the S3 client expects to find them in its
+	// environment. These are mc's names, not ours, so they cannot be
+	// renamed to match anything here.
+	envS3AccessKeyID     = "S3_ACCESS_KEY_ID"
+	envS3SecretAccessKey = "S3_SECRET_ACCESS_KEY"
 	handoffFile       = "/rehearsal/run.env"
 	downloadedFile    = "/rehearsal/from-s3.sql.gz"
 	localArchiveTag   = "local"
@@ -412,8 +427,8 @@ func shipSide(db *platformv1alpha1.Database, base corev1.Container) corev1.Conta
 			// The two that are not values. They arrive as references, so the
 			// key is in a Secret and not in this object, and the script hands
 			// them to the client on stdin rather than in argv.
-			{Name: "S3_ACCESS_KEY_ID", ValueFrom: fromSecret(s3AccessKeyIDKey)},
-			{Name: "S3_SECRET_ACCESS_KEY", ValueFrom: fromSecret(s3SecretAccessKeyKey)},
+			{Name: envS3AccessKeyID, ValueFrom: fromSecret(s3AccessKeyIDKey)},
+			{Name: envS3SecretAccessKey, ValueFrom: fromSecret(s3SecretAccessKeyKey)},
 		},
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: ptr.To(false),
@@ -429,9 +444,9 @@ func shipSide(db *platformv1alpha1.Database, base corev1.Container) corev1.Conta
 		VolumeMounts: []corev1.VolumeMount{
 			// Read-only. This container's job is to copy the archive away, and
 			// nothing it does should be able to damage the archive.
-			{Name: "backup", MountPath: "/backup", ReadOnly: true},
+			{Name: backupVolume, MountPath: backupMountPath, ReadOnly: true},
 			{Name: tmpVolume, MountPath: tmpPath},
-			{Name: "rehearsal", MountPath: "/rehearsal"},
+			{Name: rehearsalVolume, MountPath: "/rehearsal"},
 		},
 	}
 }
@@ -517,9 +532,9 @@ func backupCronJob(db *platformv1alpha1.Database, rehearse string) *batchv1.Cron
 									},
 								},
 								VolumeMounts: []corev1.VolumeMount{
-									{Name: "backup", MountPath: "/backup"},
+									{Name: backupVolume, MountPath: backupMountPath},
 									{Name: tmpVolume, MountPath: tmpPath},
-									{Name: "rehearsal", MountPath: "/rehearsal"},
+									{Name: rehearsalVolume, MountPath: "/rehearsal"},
 								},
 							}},
 							Volumes: []corev1.Volume{
@@ -537,7 +552,7 @@ func backupCronJob(db *platformv1alpha1.Database, rehearse string) *batchv1.Cron
 								// verifying can fill the volume they live on,
 								// which turns a failed rehearsal into a failed
 								// backup.
-								{Name: "rehearsal", VolumeSource: corev1.VolumeSource{
+								{Name: rehearsalVolume, VolumeSource: corev1.VolumeSource{
 									EmptyDir: &corev1.EmptyDirVolumeSource{},
 								}},
 							},

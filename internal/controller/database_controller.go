@@ -371,6 +371,12 @@ func (r *DatabaseReconciler) offsiteCondition(
 	return c
 }
 
+// reportedCredentials is the word the ship script prints when S3 refused the
+// key rather than the request. Named because the script writes it, this
+// function reads it, and the tests assert on it: three places that have to
+// agree on one token, and nothing else makes them agree.
+const reportedCredentials = "credentials"
+
 // shipReason turns what the ship container reported into a condition reason.
 //
 // A fixed set, because a reason is what something else keys on — a page, an
@@ -378,7 +384,7 @@ func (r *DatabaseReconciler) offsiteCondition(
 // script is one a script change can rename without anything noticing.
 func shipReason(reported string) string {
 	switch reported {
-	case "credentials":
+	case reportedCredentials:
 		return "CredentialRefused"
 	case "bucket":
 		return "BucketUnavailable"
